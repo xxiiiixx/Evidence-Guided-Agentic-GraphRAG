@@ -45,7 +45,7 @@ hr() { printf '\n=== %s ===\n' "$1"; }
 # ---------------------------------------------------------------- 0. 前置检查
 hr "0. 前置检查"
 if ! command -v docker >/dev/null 2>&1; then
-  echo "ERROR: docker 未安装。参见 28_day_plan.md §11 的降级路径（tarball + JRE）。"
+  echo "ERROR: docker 未安装。降级路径：Neo4j 官方 tarball + JRE 17/21（见 docs/28_day_plan.md 附注）。"
   exit 1
 fi
 if ! docker compose version >/dev/null 2>&1; then
@@ -180,8 +180,11 @@ data = {
             "Root": 1, "CookingMethod": 1, "CookingTool": 1
         },
         "relationships": {"REQUIRES": 2905, "CONTAINS_STEP": 2514, "BELONGS_TO": 314, "DIFFICULTY_LEVEL": 322},
-        "note": "BELONGS_TO/DifficultyLevel 对应关系已在 neo4j_import.cypher:198-199 核对；"
-                "Root 会被导入两次（导入脚本第二个分支缺 ID 下界），计为 2 属已知行为"
+        "totals": {"nodes": 5761, "relationships": 6055},
+        "note": "CSV 5760 行节点 + Root 重复导入 1 次 = 5761。Root 出现在两个 LOAD CSV 分支："
+                "nodeId<'200000000' 与 NOT labels IN (Recipe,Ingredient,CookingStep)（后者缺 ID 下界）。"
+                "Ingredient 2906 含元节点 300000000(食材)，真实食材 2905。"
+                "BELONGS_TO/DifficultyLevel 映射见 neo4j_import.cypher:198-199"
     }
 }
 with open("results/neo4j_stats.json", "w", encoding="utf-8") as f:
@@ -203,6 +206,24 @@ for kind in ("nodes", "relationships"):
         diff = actual - v
         flag = "" if diff == 0 else ("  <-- 检查" if abs(diff) > 1 else "  (元节点)")
         print(f"{k:<20}{actual:>8}{v:>8}{diff:>+8}{flag}")
+
+# 总数（含未单列的 label），这是 Day 1 的真正验收口径
+print()
+tot = exp.get("totals", {})
+for kind, actual_total in (
+    ("nodes", sum(d["nodes"].values())),
+    ("relationships", sum(d["relationships"].values())),
+):
+    want = tot.get(kind)
+    if want is None:
+        continue
+    diff = actual_total - want
+    flag = "" if diff == 0 else "  <-- 检查"
+    print(f"{'TOTAL '+kind:<20}{actual_total:>8}{want:>8}{diff:>+8}{flag}")
+
+print()
+print("说明：Root 计为 2 属已知行为（导入脚本两个分支都命中）；"
+      "Ingredient 2906 含元节点 300000000。")
 PY
 
 hr "done"

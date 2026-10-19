@@ -130,6 +130,27 @@ CY "MATCH p = (r:Recipe)-[:REQUIRES]->(i:Ingredient)
            i.nodeId AS ingredient_id, i.name AS ingredient_name
     LIMIT 5;"
 
+# ---- 以下是 Day 3 图重建的基线诊断，必须先记录重建前的状态 ----
+echo "--- [基线] 每个食材节点属于几道菜（Day 3 合并的判据）---"
+CY "MATCH (i:Ingredient)<-[:REQUIRES]-(r:Recipe)
+    WITH i, count(DISTINCT r) AS n
+    RETURN n AS recipes_per_ingredient, count(*) AS ingredient_nodes
+    ORDER BY n;"
+
+echo "--- [基线] 被 >=2 道菜共享的食材节点数（预期 0，若是 0 则连通性=查表）---"
+CY "MATCH (i:Ingredient)<-[:REQUIRES]-(r:Recipe)
+    WITH i, count(DISTINCT r) AS n WHERE n >= 2
+    RETURN count(i) AS ingredients_shared_by_2plus_recipes;"
+
+echo "--- [基线] 按 name 合并后会有多少个真实食材（Day 3 目标值）---"
+CY "MATCH (i:Ingredient) WHERE i.name IS NOT NULL
+    RETURN count(DISTINCT i.name) AS distinct_ingredient_names, count(i) AS ingredient_nodes;"
+
+echo "--- [基线] 按 name 合并后跨多道菜的真实食材数 ---"
+CY "MATCH (i:Ingredient)<-[:REQUIRES]-(r:Recipe)
+    WITH i.name AS name, count(DISTINCT r) AS n WHERE n >= 2
+    RETURN count(name) AS names_in_2plus_recipes;"
+
 # ---------------------------------------------------------------- 5. 落盘
 hr "5. 写入 results/neo4j_stats.json"
 python3 - "$NODES" "$RELS" <<'PY'

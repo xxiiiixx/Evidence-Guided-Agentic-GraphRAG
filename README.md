@@ -1,49 +1,174 @@
 # Evidence-Guided Agentic GraphRAG
 
-基于 [Datawhale / all-in-rag](https://github.com/datawhalechina/all-in-rag) 的 **C9（GraphRAG）** 教学项目进行二次开发，目标是在真实、可复现的检索任务中研究 Agent 的证据反馈决策与 GraphRAG 的图路径证据检索。
+> 一个**可验证**的检索智能体：把 Agent 的观测函数从「LLM 自己觉得够了没」换成「证据子图上的连通性判定」，于是每一步决策都能被离线复核。
 
-> **当前状态：原始 C9 核心代码抽取阶段（尚未完成环境复现或算法改进）。** 此版本不代表已经验证可运行、也不代表任何性能收益。
+基于 [Datawhale / all-in-rag](https://github.com/datawhalechina/all-in-rag) 的 C9 GraphRAG 教学项目二次开发，聚焦 Agent / RAG 算法方向的系统性实验。
 
-## 文档导航
+**当前状态：Day 1 / 28，环境尚未跑通，无任何性能数据。** 本仓库在实验完成前不会出现任何未经运行的指标。
 
-| 文档 | 作用 | 状态 |
-| --- | --- | --- |
-| [计划评审](./docs/plan_review.md) | 对原 28 天计划与 Day 1 工作的逐条审查，含三个被遗漏的架构级问题 | 2026-10-19 |
-| [28 天计划 v2](./docs/plan_v2.md) | **当前执行依据**，替代 `28_day_plan.md` | 进行中 |
-| [面试官手册](./docs/interviewer_guide.md) | 20 道模拟面试题与追问路径，每周自查 | 持续更新 |
-| [Day 1 Baseline 分析](./docs/baseline_analysis.md) | 源码级缺陷梳理（历史记录，部分结论已被评审修正） | 2026-10-15 |
-| [原 28 天计划](./docs/28_day_plan.md) | 历史记录，不再作为执行依据 | 已归档 |
+---
 
-## 项目结构
+## 问题
 
-- `main.py` / `config.py`：原 C9 入口与配置。
-- `rag_modules/`：原 C9 数据准备、图索引、混合检索、图检索、智能查询路由、答案生成模块。
-- `data/C9/`：原 C9 的 Neo4j Compose、Cypher 和 CSV 示例数据。
-- `.env.example` / `requirements.txt`：原 C9 的配置样例与 Python 依赖。
+RAG Agent 的核心动作是「检索 → 判断够不够 → 决定继续还是停」。现在的判断通常有两种做法：
 
-此阶段**保持 C9 核心 Python 算法代码原样**，不混入后续策略改进。原 C9 下 `agent(代码系ai生成)/` 是独立示例，未被 `main.py` 依赖，因此没有纳入精简 Baseline；需要时可通过下方上游 commit 找回。
+1. **`top_k` 非空就停** —— 最朴素，但在多实体关联问题上系统性假阳性
+2. **LLM 自评「证据是否充分」** —— Self-RAG / CRAG 一类，灵活但**不可验证、不可复现、有额外成本**
+
+用一个具体反例说明为什么二者都不够：
+
+> 问：「哪道菜同时包含鸡肉和土豆？」
+> 证据 A：某道菜含鸡肉。证据 B：另一道菜含土豆。
+> 两个关键词都命中，`relevant_docs` 非空，LLM 也可能说「够了」——**但没有任何一道菜同时含两者**。
+
+关键词覆盖与文本相似度都无法表达「多条证据**共同**支持一个多跳结论」。
+
+---
+
+## 方法
+
+### 核心 insight
+
+> **充分性不是相似度问题，是连通性问题。**
+
+### 形式化定义
+
+给定查询 `q`，抽取必需实体集 `E_q` 与必需关联集 `R_q ⊆ E_q × E_q`；给定已检索证据 `S`（每条证据携带 `node_ids` / `edge_ids`）。称 `S` 对 `q` **充分**，当且仅当：
+
+1. **实体覆盖**：`E_q ⊆ ⋃_{s∈S} nodes(s)`
+2. **连通覆盖**：`∀(e_i, e_j) ∈ R_q`，`S` 诱导子图中 `e_i` 与 `e_j` 连通
+3. **预算合规**：`cost(S) ≤ B`
+
+判定只需一次 BFS，`O(|V|+|E|)`，**零 LLM 调用**。
+
+### 与已有方法的区别
+
+| 方法 | 充分性判据 | 可证明多跳结论 | 可离线复核 | 额外 LLM 成本 |
+| --- | --- | --- | --- | :---: |
+| 朴素 RAG | `top_k` 非空 | 否 | — | 0 |
+| Self-RAG | LLM 生成 relevance token | 否（概率性） | 否 | 有 |
+| CRAG | 分类器 correct/incorrect/ambiguous | 否（文本层） | 部分 | 有 |
+| **本项目** | 子图连通性 + 覆盖 | **是（确定性）** | **是** | **0** |
+
+「可离线复核」是关键性质：给定一条 Agent trace，任何人可以在不调用模型的情况下重算当时每一步的判定，因此**决策过程可审计、可复现**。
+
+### 已知边界
+
+这是**必要条件，不是充分条件**。文本能推出、但图里没有连通的证据会被判为「不足」，产生 false negative —— 表现为多花一次检索，而非答错。项目包含图扰动实验（随机删边 10/20/30%）来量化这一退化。
+
+---
+
+## 项目状态
+
+| 周 | 时间 | 目标 | 状态 |
+| --- | --- | --- | --- |
+| W1 | Day 1–7 | 服务器环境、图检索修复、Benchmark 40 条 | 🔄 Day 1 |
+| W2 | Day 8–14 | 判定器 + 控制器 + Agent 决策指标 | ⬜ |
+| W3 | Day 15–21 | 对照实验、六组消融、鲁棒性 | ⬜ |
+| 缓冲 | Day 22–28 | 复现、README、面试打磨 | ⬜ |
+
+**当前已有的**：
+
+- 上游 C9 源码（`main.py`、`config.py`、`rag_modules/`）与 Neo4j 导入数据（`data/C9/`）
+- 源码级缺陷审查：3 个架构级问题 + 6 个已知缺陷（见 [Day 1 记录](./docs/day01.md)）
+- 28 天计划（[docs/28_day_plan.md](./docs/28_day_plan.md)）
+- Day 1 环境与数据库自检脚本（`scripts/`）
+
+**当前没有的**：任何运行记录、Benchmark、指标、模型配置。**尚无性能结论。**
+
+---
+
+## 快速开始
+
+> 以下命令尚未在本仓库完整验证。Day 1 正在验证中，验证通过后会更新本节。
+
+### 环境要求
+
+- Linux（当前开发环境为实验室服务器）
+- Docker + Docker Compose
+- Python 3.10 / 3.11（**不要用 3.13**，`torch==2.6.0` 支持不稳）
+- NVIDIA GPU 16 GB（本地跑 Qwen2.5-7B 4bit；无 GPU 可降级到 3B）
+
+### 启动数据库
+
+```bash
+cd data/C9
+docker compose up -d          # Neo4j 5.18，自动执行 cypher/neo4j_import.cypher
+docker compose ps             # 等 neo4j-db healthy、neo4j-init exit 0
+```
+
+### 自检
+
+```bash
+bash scripts/day01_env_check.sh      # 环境快照
+bash scripts/day01_db_check.sh       # 数据库统计 → results/neo4j_stats.json
+```
+
+### Python 环境
+
+```bash
+conda create -n graphrag python=3.10 -y && conda activate graphrag
+pip install -r requirements.txt
+cp .env.example .env                 # 填入 MOONSHOT_API_KEY 等
+python main.py                       # 交互式 CLI（批量入口 Day 2 加上）
+```
+
+**安全提示**：`data/C9/docker-compose.yml` 里的 Neo4j 密码是上游演示值，仅适合隔离的本地环境，不要暴露公网。
+
+---
+
+## 仓库结构
+
+```
+config.py                    配置（当前为硬编码，Day 2 改为环境变量）
+main.py                      入口，AdvancedGraphRAGSystem
+rag_modules/
+  graph_data_preparation.py  Neo4j → 菜谱文档 → 分块
+  milvus_index_construction.py  BGE embedding + Milvus HNSW
+  hybrid_retrieval.py        Dual + Dense + BM25 → RRF
+  graph_rag_retrieval.py     图查询意图 → 图路径 / 子图
+  intelligent_query_router.py 一次性路由（Baseline）
+  graph_indexing.py          图实体/关系索引
+  generation_integration.py  上下文拼接 + 生成
+data/C9/                     Neo4j compose、Cypher 导入、CSV 数据
+scripts/                     Day 1 自检脚本
+docs/
+  28_day_plan.md             28 天计划（唯一计划文档）
+  day01.md                   Day 1 执行记录
+```
+
+---
+
+## 文档
+
+- [28 天计划](./docs/28_day_plan.md) —— 定位、方法、Benchmark 设计、逐日安排、风险与降级
+- [Day 1 记录](./docs/day01.md) —— 当天做了什么、发现了什么、待办
+
+每日记录独立存放，不与计划文档混写。
+
+---
+
+## 数据
+
+C9 菜谱知识图谱：菜谱、食材、烹饪步骤、分类，以及它们之间的关系。
+
+| 节点 | 数量 | 关系 | 数量 |
+| --- | ---: | --- | ---: |
+| Ingredient | 2906 | REQUIRES | 2905 |
+| CookingStep | 2514 | CONTAINS_STEP | 2514 |
+| Recipe | 323 | BELONGS_TO | 322 |
+| RecipeCategory | 9 | DIFFICULTY_LEVEL | 314 |
+
+> 以上为 CSV 统计值，数据库实际导入结果待 Day 1 验证（见 `results/neo4j_stats.json`）。
+
+选择该数据集的理由：实体集封闭（可用确定性实体链接，排除 NER 误差干扰）、图结构真实可回查、规模允许在 21 天内跑完全部对照实验。
+
+---
 
 ## 上游来源与许可
 
-- 来源：`https://github.com/datawhalechina/all-in-rag`
+- 来源：[datawhalechina/all-in-rag](https://github.com/datawhalechina/all-in-rag)
 - 上游 Commit：[`cec956e80ae28d6c0ca84c9d39dddcf61ad633fd`](https://github.com/datawhalechina/all-in-rag/commit/cec956e80ae28d6c0ca84c9d39dddcf61ad633fd)
-- 抽取范围：`code/C9/` 的主要运行文件，`data/C9/` 的数据库导入与部署文件。
-- 原仓库 README 声明使用 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)，相关许可及作者归属请参见 [UPSTREAM.md](./UPSTREAM.md)。
-- 原项目：Datawhale 和原贡献者；此仓库后续改动与评测将明确区分原始实现和个人修改。
-
-## 运行前准备（尚待验证）
-
-1. 参考 `data/C9/docker-compose.yml` 启动 Neo4j，并导入 `data/C9/cypher/` 示例数据。
-2. 使用合适的 Python 环境安装 `requirements.txt` 的依赖。
-3. 将 `.env.example` 复制为 `.env`，按实际环境配置模型 API Key 和数据库连接（**不要提交 .env**）。
-4. 准备 Milvus 以及 `BAAI/bge-small-zh-v1.5` 模型，运行 `python main.py` 前核对原项目代码的运行入口。
-
-**安全提示：** 上游演示的 Neo4j 密码和 Docker Compose 配置只适合隔离的本地测试环境，不要直接暴露给公网。
-
-## 28 天改进主线
-
-- **Agent**：将一次性路由改进为可观察证据、受预算约束的补检索和停止决策。
-- **RAG**：完善图路径证据验证、跨检索源证据融合和来源追溯。
-- **实验**：保存原始 Baseline，构建固定测试集，比较成功率、证据质量、时延与工具调用成本，明确记录消融和失败案例。
-
-具体实验指标与结论须在真实运行后填入；尚无性能数据。
+- 抽取范围：`code/C9/` 主要运行文件、`data/C9/` 数据库导入与部署文件
+- 原仓库声明 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans)：**非商业、相同方式共享、保留署名**。详见 [UPSTREAM.md](./UPSTREAM.md)
+- 原项目版权归 Datawhale 及原贡献者；本仓库的后续改动与评测会明确区分原始实现与个人修改。**BM25 / RRF / Milvus / 原 GraphRAG 实现均不属于本项目贡献。**

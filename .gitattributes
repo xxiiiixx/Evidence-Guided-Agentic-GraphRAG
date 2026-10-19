@@ -1,0 +1,15 @@
+# 统一换行符，避免 Windows 编辑后在 Linux 上出现 bad interpreter
+* text=auto eol=lf
+
+# Shell / Python 必须 LF
+*.sh        text eol=lf
+*.py        text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.cypher    text eol=lf
+*.md        text eol=lf
+*.json      text eol=lf
+*.jsonl     text eol=lf
+
+# CSV 数据保持原样，不做换行转换
+*.csv       -text

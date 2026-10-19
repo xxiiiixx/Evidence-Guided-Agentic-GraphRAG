@@ -1,257 +1,19 @@
-# 证据可验证的自适应检索智能体 — 28 天计划（21 天执行 + 7 天缓冲）
+# 证据可验证的自适应检索智能体 — 28 天计划
 
-> 项目：Evidence-Guided Agentic GraphRAG
-> Day 1 = **2026-10-19** · Day 21 = 2026-11-08 · Day 28 = 2026-11-15
-> 目标岗位：**Agent / 智能体方向算法工程师**（DeepSeek / 腾讯 / 字节）
-> 上游：Datawhale [all-in-rag](https://github.com/datawhalechina/all-in-rag) `code/C9`，commit `cec956e8`
-> 状态标记：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 已完成且有产物 · `[!]` 做了但无产物（视为未完成）
+> Day 1 = **2026-10-20** · Day 21 = **2026-11-09** · Day 28 = **2026-11-16**
+> 每天 6 h。**每天必须落一个可验证文件**（产物列）。验收不过，次日先补，不加新功能。
 
----
-
-## 0. 前提与决策记录
-
-以下为已确认条件，计划据此设计。**任何一条变了，计划要重排。**
-
-| 项 | 已确认 | 对计划的影响 |
-| --- | --- | --- |
-| 实验环境 | 实验室 Linux 服务器 | 所有重活（Neo4j、Milvus、embedding、生成）都在服务器，本机只写代码 |
-| 算力 | 服务器 GPU 16 GB | 可本地跑 7B/14B 量化模型 → 实验可复现、无 API 成本 |
-| 岗位 | Agent / 智能体算法 | 重心从"检索指标"移到**决策质量**；必须有 oracle 对照 |
-| 时间 | 6 h/天，21 天做完 | ~126 h。28 天窗口：21 天执行 + 7 天缓冲/复现/面试 |
-| 数据集 | 采纳我的建议 | 见 §1.3 |
-| Python | 3.10 / 3.11，不用 3.13 | `torch==2.6.0` 对 3.13 支持不稳，服务器建独立 env |
-
-### 0.1 协作方式（重要，决定每天怎么干）
-
-我无法直接访问你的服务器。所以分工是：
-
-| 谁 | 做什么 |
-| --- | --- |
-| **我** | 在本机写代码、写脚本、写文档、设计实验、审结果 |
-| **你** | 把代码同步到服务器、执行命令、把输出/报错贴回来 |
-
-**每天你至少要贴回一次真实输出**（命令 + 结果）。贴不出来的部分，一律记为未完成。
-
-> **同步用 git**：本机 commit → push → 服务器 pull。不要用网盘或手拷，会丢版本。
-
----
-
-## 1. 项目定位
-
-### 1.1 一句话
-
-> 现有 RAG Agent 靠 LLM 自我反思判断"检索够了没"，这种判断不可验证、不可复现、还要额外花钱。本项目把 Agent 的**观测函数**换成**确定性可判定的证据状态**——查询实体子图上的连通性覆盖——于是每一步决策都能被审计，且在预算约束下可证明地贪心逼近 oracle。
-
-**核心 insight：Agent 该观测什么，比 Agent 该调用什么更重要。**
-
-### 1.2 三个贡献（面试就讲这三条）
-
-**C1. 可验证的观测函数。** 证据充分性 = 实体全覆盖 ∧ 必需实体对在证据子图中连通 ∧ 预算合规。判定复杂度 `O(|V|+|E|)`，**零 LLM 调用**。这使 Agent 的每一步决策都可离线复核——给定 trace，任何人都能重算当时的判定。
-
-**C2. 预算感知的工具策略 + 明确的失效条件。** 按 `missing_entities` / `missing_relations` 选择下一个工具；证明贪心在"单工具无增益、组合有增益"时失效，并在 Benchmark 中构造该类样本验证。
-
-**C3. Agent 层评测，而非只看答案准确率。** 引入 oracle 动作序列（对 ≤2 步穷举求解），得到**决策准确率、过度检索率、过早停止率、恢复率**。这是区分"Agent 项目"和"RAG 项目"的关键。
-
-### 1.3 数据集决策：C9 为主 + 图扰动做泛化
-
-**用 C9 菜谱图做主环境，不换数据集。** 理由：
-
-1. **实体集封闭**（2906 Ingredient + 323 Recipe + 2514 CookingStep），实体链接可做成确定性，不需要 NER，也不会出现"实体识别错误污染实验结论"这种不可控变量。
-2. **图结构真实且可验证**（4 类关系、2905 条 REQUIRES），路径能回查→ 支撑"可验证"这个核心卖点。
-3. **规模合适**：200 条 query 在 16G GPU 上几小时能跑完全部方法，允许做 5 组实验而不是 1 组。
-
-**换数据集的风险**（HotpotQA / 2Wiki）：需要从文本重建图，等于多花 5–7 天，而且图质量不可控，会掩盖方法本身的效果。**21 天内不值得。**
-
-**"玩具数据集"的质疑怎么答**（面试必问，现在就准备）：
-
-> C9 是受控实验环境，不是应用场景。我要验证的是"连通性判定是否比相似度更能预测充分性"这个**机制性命题**。受控环境里实体集封闭、图结构已知，才能把方法的贡献和实体识别误差分开。为了回答"是否只在完美图上成立"，我做了图扰动实验（E4）：按 10%/20%/30% 随机删边模拟真实图谱的不完整性，看判定器和 Agent 是否优雅退化。这比换一个更大的数据集、但引入不可控噪声，更能回答泛化问题。
-
-### 1.4 明确不做
-
-Multi-Agent 协作 · 前端 UI · SFT/LoRA 训练 · 通用知识图谱构建 · LangGraph 等框架（要展示算法，不是框架熟练度）· 数据集扩张 · 多轮对话（本轮只做单轮复杂查询）。
-
----
-
-## 2. 方法设计
-
-### 2.1 Agent 的形式化
-
-**工具集** `A = {hybrid, graph, verify}`（`verify` 为 P1，视进度）
-
-**状态** `s = (q, E_q, R_q, S, H, b)`，其中 `S` 为证据集，`H` 为调用历史，`b` 为剩余预算。
-
-**观测函数**（本项目的核心，确定性）：
-
-```
-assess(s) → (verdict, missing)
-  G_S ← (⋃nodes(S), ⋃edges(S))
-  missing_e ← E_q \ nodes(G_S)
-  if missing_e ≠ ∅: return (INSUFFICIENT, entities=missing_e)
-  for (e_i,e_j) ∈ R_q:
-      if not connected(G_S, e_i, e_j): missing_r.add((e_i,e_j))
-  if missing_r ≠ ∅: return (INSUFFICIENT, relations=missing_r)
-  if cost(S) > b: return (OVER_BUDGET)
-  return (SUFFICIENT, support_paths)
-```
-
-一次 BFS 可解全部连通性，`O(|V|+|E|)`，**不消耗 LLM 调用**——判定器本身不占预算。
-
-> **边界（面试必问）**：这是**必要条件不是充分条件**。文本能推出但图里没连 → false negative → 误判不足 → 多花一次检索。主动承认边界，不要掩盖。
-
-**策略**（规则贪心）：
-- `missing_entities ≠ ∅` → **hybrid**（实体召回文本更稳）
-- 仅 `missing_relations` → **graph**（连通性只能靠图补）
-- 两者都有且 `b ≥ 2` → 先 hybrid 后 graph
-- 该工具已调过且零新增 → 换另一个
-
-**失效条件（必须构造并验证）**：两个工具单独都补不齐、组合才有效时，贪心因单步无增益而提前停止 → Benchmark 第 5 类样本（§3.3）。
-
-### 2.2 成本模型（不要说"预算 2 次"就完事）
-
-| 层级 | 单位 | 典型值 |
-| --- | --- | --- |
-| 顶层工具调用 | 一次 `hybrid_search` / `graph_rag_search` | 1–2 |
-| 底层检索 | Hybrid 内 dense + bm25 + dual-level | 3 |
-| LLM 调用 | `understand_graph_query` / `analyze_query` / 生成 | 1–3 |
-| Token / 秒 | 输入+输出 / wall-clock | 记录 |
-
-**关键不对称**：`graph_rag_search` 内部调 LLM 做意图理解（`graph_rag_retrieval.py:493`），单次 Graph 成本远高于 Hybrid。不写清这点，"省工具调用"站不住。
-
-### 2.3 模型选型（16 GB GPU）
-
-| 用途 | 模型 | 说明 |
-| --- | --- | --- |
-| Embedding | `BAAI/bge-small-zh-v1.5` | 512 维，CPU 也能跑，GPU 更快 |
-| 生成（主） | Qwen2.5-7B-Instruct（4-bit, AWQ/GPTQ） | 16 GB 可跑，速度够做 200 条 |
-| 生成（交叉验证） | API 模型 | 仅 dev 40 条，验证方法不依赖模型 |
-
-**为什么用本地模型**：200 条 × 平均 2 次检索 × 生成 ≈ 600+ 次 LLM 调用，走 API 既贵又不可复现（模型会静默更新）。本地开源模型权重固定，结果可复现——这本身就是面试加分项。
-
-**模型交叉验证（E5）**：dev 40 条上同时跑 7B 和 API 模型，若结论方向一致 → 说明方法贡献不依赖特定模型。这是很强的实验设计，成本只有 40×2 次调用。
-
----
-
-## 3. Benchmark 设计
-
-### 3.1 反 Graph 偏差：图 + 文本双来源
-
-原设计所有问题由 Cypher 生成，必然偏向图。修正：每条用例同时具备
-1. **图来源**：`MATCH (r:Recipe)-[:REQUIRES]->(i:Ingredient)` 得结构化答案与路径
-2. **文本来源**：从 `CookingStep.description`、`Recipe.tags`、`Recipe.name` 确认答案
-   （C9 数据里 `Recipe.description` 100% 为空，不可用作文本来源）
-
-**只保留两源都支持的样本**。无答案负例改成"图与文本均找不到"，避免把"图谱不完整"误判为"信息不存在"。
-
-代价：200 条会掉到 80–100 条。**质量优先**，可接受。
-
-### 3.2 路径等价定义（否则指标无效）
-
-不存具体路径，存**最小证据集**：
-
-```json
-{
-  "query_id": "q001",
-  "question": "哪道菜同时用到鸡肉和土豆？",
-  "required_entities": ["鸡肉", "土豆"],
-  "required_relations": [["鸡肉", "土豆"]],
-  "minimal_evidence": {"recipe_node_id": "201000011",
-                       "ingredient_node_ids": ["201000012", "201000045"]},
-  "answer": "咖喱鸡",
-  "source": "both",
-  "bucket": "two_hop"
-}
-```
-
-命中判定：证据中存在**同一个** recipe 同时连到两个 ingredient，即算命中。**不要求跳数或中间节点**。
-
-理由：同一道菜可能有多条合法路径（REQUIRES 直连 / CONTAINS_STEP 再提到），存单条会把合法答案判错，**系统性低估自己的方法**。
-
-### 3.3 数据分布
-
-| 类型 | 条数 | 关键设计 |
-| --- | ---: | --- |
-| 单实体 / 单关系 | 50 | 一跳，两路都应能答 |
-| 两跳关联 | 60 | Ingredient → Recipe → Ingredient |
-| 组合条件 | 40 | 多食材交集，**易假阳性** |
-| 无答案 | 30 | 图与文本均无 |
-| **贪心失效** | 20 | 单工具补不齐，需组合 ← 验证 C2 |
-
-Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结后不再改动。
-
-### 3.4 Oracle 动作序列（Agent 评测的基础）
-
-对每条 query，离线穷举所有 ≤2 步的工具序列（`[hybrid]`, `[graph]`, `[hybrid,graph]`, `[graph,hybrid]` 等），用**同一个** `assess()` 判定谁先达到 SUFFICIENT，取成本最低者为 oracle。
-
-于是可以算：
-
-- **决策准确率**：Agent 选的动作是否等于 oracle 的下一步
-- **过度检索率**：已充分还继续检索
-- **过早停止率**：未充分就停
-- **步数差**：`steps_ours - steps_oracle`
-
-**这套指标是"Agent 项目"和"RAG 项目"的分水岭。** 也是面试能讲 5 分钟的东西。
-
----
-
-## 4. Baselines 与消融
-
-| ID | 方法 | 用途 |
-| --- | --- | --- |
-| B0 | Original As-Is | 缺陷记录，**不参与算法对比**（图检索两条分支为空实现，见 [day01.md](./day01.md)） |
-| B1 | 仅 Hybrid | 文本基线 |
-| B2 | 仅 Graph（修复后） | 图基线 |
-| B3 | **共享修复的 One-shot Router** | **核心对照** |
-| B4 | Always-Combined | 质量–成本上界 |
-| B5 | Self-Reflection Agent（LLM 自评"够了没"） | **同类方法对照**，证明确定性观测更优 |
-| **Ours** | 连通性判定 + 预算控制 | 待验证 |
-
-> **B5 是新增的，必须有。** 没有它，面试官会问"你为什么不直接用 LLM 反思"，你只能空谈。有了它，你能给数字。
-
-**消融**：
-
-| ID | 改动 | 验证 |
-| --- | --- | --- |
-| A1 | 判据退化为"实体覆盖 only"（去连通性） | **连通性是否真的必要** ← 核心 |
-| A2 | 去反馈，一次检索后直接生成 | 反馈是否必要 |
-| A3 | 补检索只用 Hybrid | Graph 补检索的价值 |
-| A4 | 预算 1 / 2 / 3 | 预算敏感性 |
-| A5 | 判定器换成"top-1 相似度 > 阈值" | 与相似度基线正面比较 |
-| A6 | 动作选择改为固定顺序（无 missing 感知） | 策略本身的贡献 |
-
-**归因纪律**：Ours vs B3 才是本项目贡献，修复是常量。**绝不能**报"B0 → Ours 提升 X%"，那是把修 Bug 和新方法混一起，面试当场被拆。
-
----
-
-## 5. 指标
-
-| 层级 | 指标 | 时点 |
-| --- | --- | --- |
-| 判定器 | 充分性 AUC、P/R（对人工标注） | E1 |
-| **Agent** | **决策准确率、过度检索率、过早停止率、恢复率、步数差 vs oracle** | E2 |
-| 检索 | Evidence Recall@5、Path Validity | E3 |
-| 端到端 | Answer Set-F1 / EM、拒答正确率、Task Success | E3 |
-| 成本 | 顶层/底层/LLM 调用数、Token、P50/P95 延迟 | E3 |
-| 鲁棒性 | 删边 10/20/30% 下的指标衰减曲线 | E4 |
-
-统计：Bootstrap 95% CI，按 bucket 分桶，**成对比较**（同一 query 上比方法）。禁止只用 LLM-as-Judge 下结论。
-
----
-
-## 6. 21 天执行表 + 7 天缓冲
-
-每天 6 h。**每天必须落一个可验证文件。**
-
-### Week 1（D1–7，10/19–10/25）：服务器环境 + 工具层 + Baseline
+## Week 1（D1–7，10/20–10/26）：服务器环境 + 工具层 + Baseline
 
 | Day | 日期 | 任务 | 产物 | 验收 |
 | --- | --- | --- | --- | --- |
-| **1** | 10/19 | **服务器侧**：`nvidia-smi`、`docker --version`、`python3 -V`、conda/venv 建 3.10 env；拉仓库；`docker compose -f data/C9/docker-compose.yml up -d`；确认 `neo4j-init` 退出码 0；跑计数查询。**本机侧**：读代码通读 `main.py` / `config.py` / `rag_modules/` | `results/neo4j_stats.json`、`docs/env.md` | 计数与 CSV 统计一致或差异有解释 |
-| **2** | 10/20 | ① `config.py` 改环境变量 + `to_dict()` 落盘 ② `main.py` 加 `--question/--batch/--mode` ③ Milvus 起（或 Milvus Lite 兜底）④ 跑通 3 个问题 | `results/smoke_trace.jsonl` | `--question` 单条可跑 |
-| **3** | 10/21 | 实体链接器：Aho-Corasick 匹配 3229 个实体 + `synonyms` 扩展；20 条中文 query 人工核验 | `rag_modules/entity_linker.py` + 单测 | 准确率 ≥ 85% |
-| **4** | 10/22 | 修 `_find_entity_relations`：一跳真实 Cypher，保留 nodeId / relId / 方向 | 代码 + `results/path_samples.json` | 能返回真实路径并贴出 nodeId |
-| **5** | 10/23 | 修 `_find_shortest_paths`：`shortestPath` + 深度/条数上限 | 代码 + `tests/test_graph_paths.py` | 两跳可查，无路径爆炸 |
-| **6** | 10/24 | ① 路径等价规则落地 ② Benchmark 生成器（双来源过滤） | `evaluation/benchmark_builder.py`、`dev.jsonl` | 40 条 dev，Gold 可回查 |
-| **7** | 10/25 | **B0/B1/B2 实测** + Week 1 Go/No-Go | `results/baseline_v0.json`、`docs/week01.md` | ≥5 条 trace 可展示 |
+| **1** | 10/20 | **服务器侧**：`nvidia-smi`、`docker --version`、`python3 -V`、conda 建 3.10 env；拉仓库；`docker compose -f data/C9/docker-compose.yml up -d`；确认 `neo4j-init` 退出码 0；跑节点/关系计数 | `results/neo4j_stats.json`、`docs/env.md` | 计数与 CSV 统计一致或差异有解释 |
+| **2** | 10/21 | ① `config.py` 改环境变量 + `to_dict()` 落盘 ② `main.py` 加 `--question/--batch/--mode` ③ Milvus 起（或 Milvus Lite 兜底）④ 跑通 3 个问题 | `results/smoke_trace.jsonl` | `--question` 单条可跑 |
+| **3** | 10/22 | 实体链接器：Aho-Corasick 匹配 3229 个实体 + `synonyms` 扩展；20 条中文 query 人工核验 | `rag_modules/entity_linker.py` + 单测 | 准确率 ≥ 85% |
+| **4** | 10/23 | 修 `_find_entity_relations`：一跳真实 Cypher，保留 nodeId / relId / 方向 | 代码 + `results/path_samples.json` | 能返回真实路径并贴出 nodeId |
+| **5** | 10/24 | 修 `_find_shortest_paths`：`shortestPath` + 深度/条数上限 | 代码 + `tests/test_graph_paths.py` | 两跳可查，无路径爆炸 |
+| **6** | 10/25 | ① 路径等价规则落地 ② Benchmark 生成器（双来源过滤） | `evaluation/benchmark_builder.py`、`dev.jsonl` | 40 条 dev，Gold 可回查 |
+| **7** | 10/26 | **B0/B1/B2 实测** + Week 1 Go/No-Go | `results/baseline_v0.json` | ≥5 条 trace 可展示；三门槛全绿 |
 
 **Week 1 门槛**（任一不过 → Week 2 不加新功能，先补）：
 
@@ -259,17 +21,17 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 - [ ] `_find_entity_relations` 返回真实路径
 - [ ] Benchmark 40 条，Gold 可回查率 ≥ 80%
 
-### Week 2（D8–14，10/26–11/01）：判定器 + 控制器 + Agent 指标
+## Week 2（D8–14，10/27–11/02）：判定器 + 控制器 + Agent 指标
 
 | Day | 日期 | 任务 | 产物 | 验收 |
 | --- | --- | --- | --- | --- |
-| **8** | 10/26 | `rag_modules/evidence.py`：统一 Evidence（evidence_id, source, node_ids, edge_ids, score, verified）+ 跨源去重 | 代码 + `tests/test_evidence.py` | 同事实跨源去重有 case |
-| **9** | 10/27 | 证据子图构建 + `assess()` 连通性判定 | `rag_modules/sufficiency.py` | 正例判充分、"两实体无关联"反例判不足 |
-| **10** | 10/28 | **E1：判定器 AUC 实验**（见 §7，项目成立与否看这个） | `results/e1_auc.json` | AUC > 0.7 才继续 |
-| **11** | 10/29 | `evidence_controller.py`：状态机 + 预算 + 动作选择 | 代码 + `tests/test_controller.py` | 不死循环、不超预算、Mock 可测 |
-| **12** | 10/30 | Oracle 动作序列表 + **E2：Agent 决策指标** | `results/oracle.json`、`results/e2_agent.json` | 决策准确率可算 |
-| **13** | 10/31 | 接入 `--mode baseline/adaptive`，跑 40 条 dev | `results/adaptive_dev.jsonl` | 每条有 state→action 轨迹 |
-| **14** | 11/01 | 错误分类 + **Week 2 Go/No-Go** | `docs/error_taxonomy.md` | ≥3 个失败案例能解释 |
+| **8** | 10/27 | `rag_modules/evidence.py`：统一 Evidence（evidence_id, source, node_ids, edge_ids, score, verified）+ 跨源去重 | 代码 + `tests/test_evidence.py` | 同事实跨源去重有 case |
+| **9** | 10/28 | 证据子图构建 + `assess()` 连通性判定 | `rag_modules/sufficiency.py` | 正例判充分、"两实体无关联"反例判不足 |
+| **10** | 10/29 | **E1：判定器 AUC 实验**（项目成立与否看这个） | `results/e1_auc.json` | AUC > 0.7 才继续 |
+| **11** | 10/30 | `evidence_controller.py`：状态机 + 预算 + 动作选择 | 代码 + `tests/test_controller.py` | 不死循环、不超预算、Mock 可测 |
+| **12** | 10/31 | Oracle 动作序列表 + **E2：Agent 决策指标** | `results/oracle.json`、`results/e2_agent.json` | 决策准确率可算 |
+| **13** | 11/01 | 接入 `--mode baseline/adaptive`，跑 40 条 dev | `results/adaptive_dev.jsonl` | 每条有 state→action 轨迹 |
+| **14** | 11/02 | 错误分类 + **Week 2 Go/No-Go** | `docs/error_taxonomy.md` | ≥3 个失败案例能解释 |
 
 **Week 2 门槛**：
 
@@ -277,19 +39,19 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 - [ ] E2 有 oracle 对照
 - [ ] Controller 有完整 `state → action → observation → stop` 轨迹，可回放手算
 
-> **若 Day 10 AUC < 0.6 → 停止推进，找我讨论。** 这通常意味着：(a) 人工标注定义模糊，(b) 连通性判据太粗（比如没区分关系类型），(c) 数据集的图太密（几乎所有实体都连通）。三条都有对应改法，但要先诊断。
+> **若 Day 10 AUC < 0.6 → 停止推进。** 通常意味着：(a) 人工标注定义模糊，(b) 连通性判据太粗，(c) 图的密度过高。三条都有改法，但要先诊断。
 
-### Week 3（D15–21，11/02–11/08）：对照 + 消融 + 鲁棒性 + 交付
+## Week 3（D15–21，11/03–11/09）：对照 + 消融 + 鲁棒性 + 交付
 
-| Day | 日期 | 任务 | 产物 |
-| --- | --- | --- | --- |
-| **15** | 11/02 | B3 实现并跑 | `results/b3.jsonl` |
-| **16** | 11/03 | B4 / **B5（LLM 自评）** 跑 | `results/b4_b5.jsonl` |
-| **17** | 11/04 | 冻结 test，Ours 跑 160 条 | `results/ours_test.jsonl` |
-| **18** | 11/05 | 消融 A1 / A2 / A6 | `results/ablation_a1a2a6.json` |
-| **19** | 11/06 | 消融 A3 / A4 / A5 | 同上 |
-| **20** | 11/07 | **E4 图扰动鲁棒性** + E5 模型交叉验证 | `results/e4_perturb.json`、`e5_model.json` |
-| **21** | 11/08 | 统计（Bootstrap CI）+ 成本分析 + **Week 3 Go/No-Go** | `results/final_metrics.json`、`cost.json` |
+| Day | 日期 | 任务 | 产物 | 验收 |
+| --- | --- | --- | --- | --- |
+| **15** | 11/03 | B3 实现并跑 | `results/b3.jsonl` | 与 B1/B2 同一 test 集，可复算 |
+| **16** | 11/04 | B4 / **B5（LLM 自评）** 跑 | `results/b4_b5.jsonl` | B5 有 LLM 自评判定记录 |
+| **17** | 11/05 | 冻结 test，Ours 跑 160 条 | `results/ours_test.jsonl` | test 冻结后未改动 |
+| **18** | 11/06 | 消融 A1 / A2 / A6 | `results/ablation_a1a2a6.json` | A1 必须完成 |
+| **19** | 11/07 | 消融 A3 / A4 / A5 | 同上 | 六组消融合计齐全 |
+| **20** | 11/08 | **E4 图扰动鲁棒性** + E5 模型交叉验证 | `results/e4_perturb.json`、`e5_model.json` | 10/20/30% 删边曲线有数 |
+| **21** | 11/09 | 统计（Bootstrap CI）+ 成本分析 + **Week 3 Go/No-Go** | `results/final_metrics.json`、`cost.json` | Ours vs B3 vs B5 有真实数字 + 95% CI |
 
 **Week 3 门槛**：
 
@@ -298,145 +60,14 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 - [ ] ≥5 成功 + 5 失败案例，每个能讲清归因
 - [ ] **负结果不隐藏**——若 Ours 没赢，写"没赢，原因是 X"
 
-### 缓冲期（D22–28，11/09–11/15）
+## 缓冲期（D22–28，11/10–11/16）
 
-| Day | 日期 | 任务 |
-| --- | --- | --- |
-| **22** | 11/09 | 补 Week 3 缺口（最可能超时的是消融和扰动实验） |
-| **23** | 11/10 | `scripts/run_baseline.py` / `run_experiment.py` / `smoke_test.py` 一键复现 |
-| **24** | 11/11 | README 重写（问题→方法→实验→限制）+ 架构图 |
-| **25** | 11/12 | 简历 3 条（只用实测数字）+ 2 / 5 分钟讲述稿 |
-| **26** | 11/13 | 模拟面试：§9 全部 20 题 |
-| **27** | 11/14 | limitations 文档（把失败变成 future work） |
-| **28** | 11/15 | 全新环境复现 + Release tag |
-
----
-
-## 7. E1：判定器有效性（项目成立的核心证据）
-
-**问题**：连通性覆盖判定，是否比 top-k 相似度更能预测"证据是否真的充分"？
-
-**为什么这个实验比端到端 F1 重要**：它不依赖生成质量。端到端 F1 混了检索、判定、生成三层误差；E1 只测判定这一层。
-
-**做法**：
-
-1. 取 60 条 dev query，覆盖五个 bucket
-2. 对每条用**同一个**固定检索器（B3）拿证据集
-3. 计算三个分数：
-   - `score_conn`：连通性判定（二值）
-   - `score_ent`：仅实体覆盖（二值）
-   - `score_sim`：top-1 证据相似度（连续）
-4. 人工标注每条"证据是否真充分"（**只看证据，不看答案**；两人独立标，算 Cohen's κ）
-5. 算三者对人工标注的 AUC
-
-**预期**：`score_conn` > `score_ent`（连通性有独立贡献）且 `score_conn` > `score_sim`。
-
-**若相反 → 是重要负结果**，说明该数据集上相似度够用。**不许藏，写进报告。**
-
----
-
-## 8. E4 / E5：鲁棒性与模型无关性
-
-**E4 图扰动**：按 10% / 20% / 30% 随机删边（每条边以固定 seed 删除），重跑 Ours vs B3 vs B5。看指标衰减曲线。
-
-- 预期：Ours 衰减更平缓（因为判定器会识别"图里没连"，主动补检索；而相似度基线会盲目自信）
-- 这是把"玩具数据集"质疑转成研究贡献的关键实验
-
-**E5 模型交叉验证**：dev 40 条上同时用 Qwen2.5-7B(4bit) 和 API 模型，比较结论方向是否一致。若一致 → 方法不依赖特定模型。
-
----
-
-## 9. 模拟面试 20 题（每周日取 5–8 题，不给准备时间）
-
-评分：🟢 能扛 2 层追问 · 🟡 能说结论但追问露馅 · 🔴 说不清
-
-### 动机
-1. **一句话说清你在做什么？** → "Agent 该观测什么，比该调用什么更重要"。追问：为什么重要 / 不解决会怎样。
-2. **为什么用 C9 这个玩具数据集？** → 受控实验环境，隔离实体识别误差；图扰动实验回答泛化。**这是必问题，答案在 §1.3。**
-3. **你的 Baseline 是什么？** → C9，图检索未实现（**主动说**）。追问：那你的收益不就是修 Bug？→ Q12。
-
-### 技术深度
-4. **为什么用 RRF 不用加权求和？** → 分数不可比（BM25 vs cosine），只用排名。追问：公式 `Σ 1/(k+rank)`，k=60 的作用。
-5. **一道菜 5 个 chunk 都命中，naive RRF 会怎样？** → 同文档加 5 次分而霸榜。追问：C9 怎么解 → `_rrf_merge` 按 `node_id` 归并。**检验是否真读过代码。**
-6. **充分性判定具体怎么算？** → 三条件 + BFS。追问：举反例；复杂度；**图里没连但文本能推怎么办**（false negative，必要条件非充分）；为什么不直接查库（那是查库不是判已检索证据）。
-7. **为什么不直接用 LLM 自评"够了没"？** → 不可验证、不可复现、有成本。**追问：有数据吗？→ B5 对照实验。**
-8. **实体识别怎么做的？** → 词典匹配 3229 实体，非 NER 非 LLM。追问：为什么；同义词；**用户说"鸡"不是"鸡肉"怎么办**（词典硬伤，诚实承认 + 子串/别名字典兜底）。
-9. **为什么预算 2？贪心何时失效？** → 是实验变量（A4）；"单工具无增益、组合有增益"时失效，Benchmark 第 5 类样本验证。
-
-### 实验设计（Agent 岗重点）
-10. **怎么证明比 Baseline 好？** → 分层：E1 判定器 → E2 决策质量 → E3 端到端。追问：**AUC 高端到端没提升怎么回事**（问题在生成侧）。
-11. **你的 Agent 决策怎么评测？** → oracle 动作序列（≤2 步穷举），算决策准确率/过度检索率/过早停止率。**这题答好直接区分水平。**
-12. **Benchmark 会偏向图吗？** → 会，双来源过滤。追问：删太多怎么办；模板痕迹怎么防。
-13. **路径命中怎么定义？** → 最小证据集，不存具体路径。追问：为什么；中间节点不对怎么办。
-
-### 杀手问题
-14. **你的改进本质不就是修 C9 的 Bug 吗？** 🔴
-    结构：① 承认 B0→B3 主要来自修复 ② B3 是**唯一有效对照** ③ Ours vs B3 中修复是常量 ④ A1 掉点才证明方法独立贡献。**绝不能说**"B0 到 Ours 提升 30%"。
-15. **和 Self-RAG / CRAG / Adaptive-RAG 区别？** → **判定 vs 打分**：它们概率性/文本层，我确定性可判定。追问：只对有图数据有用？→ 是的，主动承认边界。
-16. **Always-Combined 比你准怎么办？** → 它是质量上界，我目标是成本约束下逼近。追问：贡献是什么（Pareto）；**只省 5% 值得吗**（诚实：不值得）。
-17. **你的方法失败会怎样？** → 假阴性（多花检索）、假阳性（早停）、贪心失效。追问：怎么检测（trace 分类统计）。
-
-### 工程与研究品味
-18. **怎么保证可复现？** → 种子、锁版本、配置落盘、commit SHA、**本地固定权重模型**。注意：Day 2 修好 config 前这题答不了。
-19. **这个工作的 insight 是什么？能推广吗？** → 观测函数可验证；推广到代码依赖图、医疗图谱、法律引用。追问：**怎么验证不是自说自话**（E1 的 AUC + κ）。
-20. **给你 6 个月会做什么？** → ① 判定器可学习化 ② 图不完整时的判定 ③ 预算控制形式化为 MDP。追问：选哪个 + 为什么。
-
----
-
-## 10. 风险与降级
-
-| 风险 | 触发信号 | 动作 |
-| --- | --- | --- |
-| 服务器 Docker 不可用 | Day 1 | Neo4j：`neo4j` 官方 tarball + JRE；Milvus：Milvus Lite（`pymilvus` 直连 `./milvus.db`，无需 Docker） |
-| GPU 显存不够跑 7B | Day 2 | 降到 Qwen2.5-3B 或 4bit 更激进量化；embedding 走 CPU |
-| 判定器无效 | Day 10 AUC < 0.6 | 按 §6 三条诊断；仍不行则降级为启发式，负结果写进报告 |
-| Benchmark 质量差 | Day 6 可回查率 < 80% | 缩到 80 条，保质量 |
-| Ours 不如 B3 | Week 3 | 写"为什么没赢"，仍是合格交付 |
-| 时间不够 | 任一周末 Go/No-Go 失败 | 砍 A4/A5/A6、砍 E5，保 MVP |
-
-### 三档交付
-
-| 等级 | 内容 |
-| --- | --- |
-| **MVP（保底）** | 可复现 Baseline + 图路径修复 + 80 条 Benchmark + B3/Ours 对照 + E1 判定器 AUC + 失败分析 |
-| **标准（目标）** | 上述 + E2 Agent 决策指标 + 160 条 test + 4 组消融 + B5 对照 + 成本分析 |
-| **进阶** | 上述 + E4 图扰动 + E5 模型交叉验证 + 贪心失效分析 + 一键复现 |
-
----
-
-## 11. 每日工作流
-
-1. **开始**：写下今天要产出的**文件名**（不是"学习 X"）
-2. **结束**：`git commit`，message 写"做了什么 + 产物路径"
-3. **睡前**：`docs/daily_log.md` 加一行 `Day N | 产物 | 卡点 | 明早第一件事`
-
-### 每周日 Go/No-Go
-
-```
-[ ] 本周产出了可验证文件？（不是文字）
-[ ] 能否对着代码讲 10 分钟本周工作？
-[ ] 有无未提交代码？
-[ ] 下周时间减半，砍哪一项？
-[ ] 今天面试能讲 20 分钟吗？
-```
-
-任一项打叉 → **下周先补，不加新功能**。
-
----
-
-## 12. 许可与归属
-
-上游 CC BY-NC-SA 4.0：非商业、相同方式共享、保留署名。仓库 `UPSTREAM.md` 已声明来源与许可。
-
-- 原项目：Datawhale / all-in-rag 贡献者
-- 本项目：所有改动须与上游区分，**不得**把 RRF / Milvus / 原 GraphRAG 算作个人贡献
-- 面试展示前确认用途符合非商业条款
-
----
-
-## 附 A：待确认事项（影响后续设计，但不阻塞 Day 1）
-
-1. 服务器是否已装 Docker？若无，能否装（sudo 权限）？
-2. 服务器是独占还是多人共享？能长期占着 Neo4j 容器吗？
-3. 服务器能否访问 HuggingFace / 魔搭（下 Qwen 权重）？若不能，需要提前准备离线权重。
-4. 你手上是否已有可用的 API key（若主模型走本地，只需 dev 交叉验证时用）。
+| Day | 日期 | 任务 | 产物 | 验收 |
+| --- | --- | --- | --- | --- |
+| **22** | 11/10 | 补 Week 3 缺口（最可能超时的是消融和扰动实验） | 按缺口定 | Week 3 三门槛全绿 |
+| **23** | 11/11 | `scripts/run_baseline.py` / `run_experiment.py` / `smoke_test.py` 一键复现 | 三个脚本 | 干净环境能跑通 |
+| **24** | 11/12 | README 重写（问题→方法→实验→限制）+ 架构图 | `README.md` | 30 秒能看懂价值 |
+| **25** | 11/13 | 简历 3 条 + 2 / 5 分钟讲述稿 | `docs/pitch.md` | 只用实测数字 |
+| **26** | 11/14 | 模拟面试 20 题 | `docs/interview.md` | 每题能扛 2 层追问 |
+| **27** | 11/15 | limitations 文档（把失败变成 future work） | `docs/limitations.md` | 每个失败案例有归因 |
+| **28** | 11/16 | 全新环境复现 + Release tag | tag | 复现成功 |

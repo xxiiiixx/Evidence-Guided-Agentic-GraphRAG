@@ -25,7 +25,7 @@
 
 ### 2.1 源码审查（本机，已核实）
 
-通读了 `main.py`、`config.py`、`rag_modules/` 全部 8 个模块（约 3857 行），逐条定位缺陷。三个**架构级**发现如下（详细证据已并入计划 §2，此处只记结论与影响）：
+通读了 `main.py`、`config.py`、`rag_modules/` 全部 8 个模块（约 3857 行），逐条定位缺陷。三个**架构级**发现如下（本文件是唯一记录处；`docs/28_day_plan.md` 只写计划，不含执行过程）：
 
 **① 环境变量根本没被消费。**
 全仓库 `getenv` 只有 `generation_integration.py:27` 一处，`config.py:81` 的 `DEFAULT_CONFIG = GraphRAGConfig()` 是纯硬编码 dataclass。
@@ -95,16 +95,27 @@ bash scripts/day01_db_check.sh 2>&1 | tee results/day01_db_check.txt
 
 ## 4. 预期值（用于核对）
 
-按 CSV 统计（`nodes.csv` 5761 行、`relationships.csv` 6056 行，均含表头）：
+按 CSV 实际解析（`nodes.csv` 5760 条 + 表头、`relationships.csv` 6055 条 + 表头）：
 
-| 节点 | 预期 | 关系 | 预期 |
+| 节点 label | CSV 行数 | 关系 | CSV 行数 |
 | --- | ---: | --- | ---: |
 | Ingredient | 2906 | REQUIRES (801000001) | 2905 |
 | CookingStep | 2514 | CONTAINS_STEP (801000003) | 2514 |
-| Recipe | 323 | BELONGS_TO (801000004) | 322 |
-| RecipeCategory | 9 | DIFFICULTY_LEVEL (801000005) | 314 |
+| Recipe | 323 | BELONGS_TO (801000004) | 314 |
+| RecipeCategory | 9 | DIFFICULTY_LEVEL (801000005) | 322 |
+| DifficultyLevel | 5 | | |
+| Root / CookingMethod / CookingTool | 各 1 | | |
 
-> `nodes.csv` 每类第一行是类型元节点（如 `300000000,Ingredient,食材,...`），导入后计数可能差 1，属正常，记录即可。
+> `BELONGS_TO` = 314、`DIFFICULTY_LEVEL` = 322 已按 `relationships.csv` 逐条核对，并由
+> `neo4j_import.cypher:198-199` 的类型映射（801000004 → BELONGS_TO，801000005 → DIFFICULTY_LEVEL）确认。
+
+**两点会影响核对判读的细节**：
+
+1. **元节点**。CSV 里 `200000000 菜谱 / 300000000 食材 / 400000000 烹饪方法 / 500000000 烹饪工具` 四条是类型元节点，
+   它们不在任何关系的端点里。导入后计数的差异来自脚本的过滤条件，记录差异即可。
+2. **`Root` 会被导入两次**。`neo4j_import.cypher` 里 `nodeId < '200000000'` 的分支先建一次 Root，
+   随后 `NOT labels IN (Recipe, Ingredient, CookingStep)` 的分支没有 ID 下界、又用 `apoc.create.node` 建一次。
+   所以 `MATCH (n) RETURN labels(n)[0]` 里 `Root` 可能计为 2，属已知脚本行为，不是导入失败。
 
 ---
 

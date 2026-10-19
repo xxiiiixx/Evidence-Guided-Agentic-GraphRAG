@@ -153,9 +153,14 @@ data = {
     "nodes": parse(nodes_raw),
     "relationships": parse(rels_raw),
     "expected_from_csv": {
-        "nodes": {"Ingredient": 2906, "CookingStep": 2514, "Recipe": 323, "RecipeCategory": 9},
-        "relationships": {"REQUIRES": 2905, "CONTAINS_STEP": 2514, "BELONGS_TO": 322, "DIFFICULTY_LEVEL": 314},
-        "note": "CSV 每类首行为类型元节点，实际计数可能差 1；以数据库为准并记录差异"
+        "nodes": {
+            "Ingredient": 2906, "CookingStep": 2514, "Recipe": 323,
+            "RecipeCategory": 9, "DifficultyLevel": 5,
+            "Root": 1, "CookingMethod": 1, "CookingTool": 1
+        },
+        "relationships": {"REQUIRES": 2905, "CONTAINS_STEP": 2514, "BELONGS_TO": 314, "DIFFICULTY_LEVEL": 322},
+        "note": "BELONGS_TO/DifficultyLevel 对应关系已在 neo4j_import.cypher:198-199 核对；"
+                "Root 会被导入两次（导入脚本第二个分支缺 ID 下界），计为 2 属已知行为"
     }
 }
 with open("results/neo4j_stats.json", "w", encoding="utf-8") as f:

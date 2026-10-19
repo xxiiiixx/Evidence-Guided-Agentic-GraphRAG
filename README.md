@@ -141,7 +141,7 @@ docs/
 
 ## 文档
 
-- [28 天计划](./docs/28_day_plan.md) —— 定位、方法、Benchmark 设计、逐日安排、风险与降级
+- [28 天计划](./docs/28_day_plan.md) —— 定位、方法、Benchmark 设计、逐日安排、风险与降级（只写计划，不记执行过程）
 - [Day 1 记录](./docs/day01.md) —— 当天做了什么、发现了什么、待办
 
 每日记录独立存放，不与计划文档混写。
@@ -152,14 +152,17 @@ docs/
 
 C9 菜谱知识图谱：菜谱、食材、烹饪步骤、分类，以及它们之间的关系。
 
-| 节点 | 数量 | 关系 | 数量 |
+| 节点 label | 数量 | 关系 | 数量 |
 | --- | ---: | --- | ---: |
-| Ingredient | 2906 | REQUIRES | 2905 |
-| CookingStep | 2514 | CONTAINS_STEP | 2514 |
-| Recipe | 323 | BELONGS_TO | 322 |
-| RecipeCategory | 9 | DIFFICULTY_LEVEL | 314 |
+| Ingredient | 2906 | REQUIRES（Recipe→Ingredient） | 2905 |
+| CookingStep | 2514 | CONTAINS_STEP（Recipe→CookingStep） | 2514 |
+| Recipe | 323 | BELONGS_TO（Recipe→RecipeCategory） | 314 |
+| RecipeCategory | 9 | DIFFICULTY_LEVEL（Recipe→DifficultyLevel） | 322 |
+| DifficultyLevel | 5 | | |
+| Root / CookingMethod / CookingTool | 各 1 | | |
 
 > 以上为 CSV 统计值，数据库实际导入结果待 Day 1 验证（见 `results/neo4j_stats.json`）。
+> 计数含 4 个类型元节点（`200000000` 菜谱、`300000000` 食材等），故 `Ingredient 2906` 比实际食材数多 1。
 
 选择该数据集的理由：实体集封闭（可用确定性实体链接，排除 NER 误差干扰）、图结构真实可回查、规模允许在 21 天内跑完全部对照实验。
 

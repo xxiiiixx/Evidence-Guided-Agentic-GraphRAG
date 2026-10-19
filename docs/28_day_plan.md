@@ -1,7 +1,7 @@
 # 证据可验证的自适应检索智能体 — 28 天计划（21 天执行 + 7 天缓冲）
 
 > 项目：Evidence-Guided Agentic GraphRAG
-> Day 1 = **2026-10-19**（今天）· Day 21 = 2026-11-08 · Day 28 = 2026-11-15
+> Day 1 = **2026-10-19** · Day 21 = 2026-11-08 · Day 28 = 2026-11-15
 > 目标岗位：**Agent / 智能体方向算法工程师**（DeepSeek / 腾讯 / 字节）
 > 上游：Datawhale [all-in-rag](https://github.com/datawhalechina/all-in-rag) `code/C9`，commit `cec956e8`
 > 状态标记：`[ ]` 未开始 · `[~]` 进行中 · `[x]` 已完成且有产物 · `[!]` 做了但无产物（视为未完成）
@@ -19,6 +19,7 @@
 | 岗位 | Agent / 智能体算法 | 重心从"检索指标"移到**决策质量**；必须有 oracle 对照 |
 | 时间 | 6 h/天，21 天做完 | ~126 h。28 天窗口：21 天执行 + 7 天缓冲/复现/面试 |
 | 数据集 | 采纳我的建议 | 见 §1.3 |
+| Python | 3.10 / 3.11，不用 3.13 | `torch==2.6.0` 对 3.13 支持不稳，服务器建独立 env |
 
 ### 0.1 协作方式（重要，决定每天怎么干）
 
@@ -31,13 +32,7 @@
 
 **每天你至少要贴回一次真实输出**（命令 + 结果）。贴不出来的部分，一律记为未完成。
 
-> 本机是 Windows，schannel 凭据链有问题（`SEC_E_NO_CREDENTIALS`），git 已设 `http.sslBackend=openssl`。**同步建议用 git**：本机 commit → push → 服务器 pull。不要用网盘或手拷，会丢版本。
-
-### 0.2 本地环境现状（今天实测）
-
-- `docker` **未安装**，`wsl` **未启用** → 本机无法跑 Neo4j/Milvus。**不影响**，因为重活在服务器。
-- 有 conda，Python 3.13.11（base）。**不建议**用 3.13 跑这个项目（`torch==2.6.0` 对 3.13 支持不稳），服务器上请用 **3.10 或 3.11** 建独立 env。
-- 本机 D 盘剩余约 87 GB。
+> **同步用 git**：本机 commit → push → 服务器 pull。不要用网盘或手拷，会丢版本。
 
 ---
 
@@ -77,74 +72,9 @@ Multi-Agent 协作 · 前端 UI · SFT/LoRA 训练 · 通用知识图谱构建 �
 
 ---
 
-## 2. Day 1 已完成的工作（源码审查，结论已核实）
+## 2. 方法设计
 
-### 2.1 三条架构级发现（原计划完全遗漏）
-
-**① 【致命】环境变量根本没被消费。** 全仓库 grep `getenv|environ` 只有一处：
-
-```
-rag_modules/generation_integration.py:27   api_key = os.getenv("MOONSHOT_API_KEY")
-```
-
-`config.py:81` 的 `DEFAULT_CONFIG = GraphRAGConfig()` 是纯硬编码 dataclass。后果：`.env` 里 `NEO4J_URI`/`MILVUS_HOST`/`EMBEDDING_MODEL`/`LLM_MODEL` **全部无效**；换模型必须改代码；**实验不可复现**（没有可序列化的运行时配置来源）。
-
-**② 【严重】图检索不是"部分空实现"，是整条链路断的。**
-
-`graph_rag_search` 分派（`graph_rag_retrieval.py:500-517`）：
-
-| query_type | 路径 | 实际结果 |
-| --- | --- | --- |
-| `MULTI_HOP` | `multi_hop_traversal` → 变长路径 Cypher | 能出结果（有路径爆炸风险） |
-| `PATH_FINDING` | → `_find_shortest_paths` → **`return []`** | **恒空** |
-| `ENTITY_RELATION` | → `_find_entity_relations` → **`return []`** | **恒空** |
-| `SUBGRAPH` / `CLUSTERING` | `extract_knowledge_subgraph` | 能出结果 |
-
-`ENTITY_RELATION` 恰是最高频类型（"哪道菜含鸡肉和土豆"）。→ **Graph 基线在最常见问题上召回率恒为 0。**
-
-直接决定实验设计：B2（仅 Graph）在原样代码下无意义；B0 的低分**不能归因于"没有反馈"**；**Ours vs B3（共享修复的 One-shot）是唯一有效对照**。
-
-另：`_build_reasoning_chain` 返回 `f"基于{pattern}的推理链"`，`_validate_reasoning_chains` 只是 `chains[:3]`——"推理链验证"是占位，**不可作为证据**。
-
-**③ 【关键机会】实体识别不需要 NER。**
-
-`intelligent_query_router.py:161` 的 `entity_count=len(query.split())` 对中文恒为 1（bug）。但它揭示正确做法：实体系封闭集，`nodes.csv` 有 2906+323 个名字，`synonyms` 字段 520 条非空 → **Aho-Corasick 多模式匹配**即可，零 LLM 成本、可复现、绕开中文分词噪音。
-
-### 2.2 值得复用的精妙设计（面试素材）
-
-`hybrid_retrieval.py:630-700` 的 `_rrf_merge`：
-
-```
-# 同 source 内同 doc_id 多次命中（如一道菜的多个 chunk 共享 recipe.nodeId）：
-#   - 算分只取该 source 内最佳 rank（最小 rank）一次，避免重复加分
-#   - 命中 chunk 数另存到 rrf_chunk_hits，供后续分析
-```
-
-一道菜切 5 个 chunk，5 个都命中时 naive RRF 会加 5 次分而霸榜；这段按 `node_id` 归并解决。
-
-**复用价值**：`rrf_chunk_hits` 天然是 `Evidence Novelty` 信号，A2 消融可直接用，不必新造特征。
-
-### 2.3 其他已确认缺陷
-
-| 缺陷 | 位置 | 影响 |
-| --- | --- | --- |
-| Prompt 要求解析 `constraints`，未写入 `GraphQuery` | `understand_graph_query` | 时间/健康约束丢失 |
-| 路径证据缺完整节点/边身份与方向 | `_paths_to_documents` | 无法核验引用 |
-| 子图提取与关系列表转换可能不一致 | `extract_knowledge_subgraph` | Day 4–5 用真实 Cypher 验证 |
-| 仅异常时 fallback，低质量不补检索 | `route_query` | 两类问题被混淆 |
-| 非空文档直接进生成，无充分性判定 | `main.py:271` | 本项目要解决的核心 |
-| **无批量入口** | `main.py:440` 只有交互式 CLI | **不能跑 200 条 Benchmark** |
-
-### 2.4 Day 1 未完成的部分（明天补）
-
-- 服务器环境未验证（Neo4j / Milvus / GPU / 依赖）
-- 零运行记录
-
----
-
-## 3. 方法设计
-
-### 3.1 Agent 的形式化
+### 2.1 Agent 的形式化
 
 **工具集** `A = {hybrid, graph, verify}`（`verify` 为 P1，视进度）
 
@@ -174,9 +104,9 @@ assess(s) → (verdict, missing)
 - 两者都有且 `b ≥ 2` → 先 hybrid 后 graph
 - 该工具已调过且零新增 → 换另一个
 
-**失效条件（必须构造并验证）**：两个工具单独都补不齐、组合才有效时，贪心因单步无增益而提前停止 → Benchmark 第 5 类样本（§4.3）。
+**失效条件（必须构造并验证）**：两个工具单独都补不齐、组合才有效时，贪心因单步无增益而提前停止 → Benchmark 第 5 类样本（§3.3）。
 
-### 3.2 成本模型（不要说"预算 2 次"就完事）
+### 2.2 成本模型（不要说"预算 2 次"就完事）
 
 | 层级 | 单位 | 典型值 |
 | --- | --- | --- |
@@ -187,7 +117,7 @@ assess(s) → (verdict, missing)
 
 **关键不对称**：`graph_rag_search` 内部调 LLM 做意图理解（`graph_rag_retrieval.py:493`），单次 Graph 成本远高于 Hybrid。不写清这点，"省工具调用"站不住。
 
-### 3.3 模型选型（16 GB GPU）
+### 2.3 模型选型（16 GB GPU）
 
 | 用途 | 模型 | 说明 |
 | --- | --- | --- |
@@ -201,19 +131,20 @@ assess(s) → (verdict, missing)
 
 ---
 
-## 4. Benchmark 设计
+## 3. Benchmark 设计
 
-### 4.1 反 Graph 偏差：图 + 文本双来源
+### 3.1 反 Graph 偏差：图 + 文本双来源
 
 原设计所有问题由 Cypher 生成，必然偏向图。修正：每条用例同时具备
 1. **图来源**：`MATCH (r:Recipe)-[:REQUIRES]->(i:Ingredient)` 得结构化答案与路径
-2. **文本来源**：从 `r.description` 或 `CookingStep` 文本确认答案
+2. **文本来源**：从 `CookingStep.description`、`Recipe.tags`、`Recipe.name` 确认答案
+   （C9 数据里 `Recipe.description` 100% 为空，不可用作文本来源）
 
 **只保留两源都支持的样本**。无答案负例改成"图与文本均找不到"，避免把"图谱不完整"误判为"信息不存在"。
 
 代价：200 条会掉到 80–100 条。**质量优先**，可接受。
 
-### 4.2 路径等价定义（否则指标无效）
+### 3.2 路径等价定义（否则指标无效）
 
 不存具体路径，存**最小证据集**：
 
@@ -235,7 +166,7 @@ assess(s) → (verdict, missing)
 
 理由：同一道菜可能有多条合法路径（REQUIRES 直连 / CONTAINS_STEP 再提到），存单条会把合法答案判错，**系统性低估自己的方法**。
 
-### 4.3 数据分布
+### 3.3 数据分布
 
 | 类型 | 条数 | 关键设计 |
 | --- | ---: | --- |
@@ -247,7 +178,7 @@ assess(s) → (verdict, missing)
 
 Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结后不再改动。
 
-### 4.4 Oracle 动作序列（Agent 评测的基础）
+### 3.4 Oracle 动作序列（Agent 评测的基础）
 
 对每条 query，离线穷举所有 ≤2 步的工具序列（`[hybrid]`, `[graph]`, `[hybrid,graph]`, `[graph,hybrid]` 等），用**同一个** `assess()` 判定谁先达到 SUFFICIENT，取成本最低者为 oracle。
 
@@ -262,11 +193,11 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 5. Baselines 与消融
+## 4. Baselines 与消融
 
 | ID | 方法 | 用途 |
 | --- | --- | --- |
-| B0 | Original As-Is | 缺陷记录，**不参与算法对比**（§2.1②） |
+| B0 | Original As-Is | 缺陷记录，**不参与算法对比**（图检索两条分支为空实现，见 [day01.md](./day01.md)） |
 | B1 | 仅 Hybrid | 文本基线 |
 | B2 | 仅 Graph（修复后） | 图基线 |
 | B3 | **共享修复的 One-shot Router** | **核心对照** |
@@ -291,7 +222,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 6. 指标
+## 5. 指标
 
 | 层级 | 指标 | 时点 |
 | --- | --- | --- |
@@ -306,7 +237,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 7. 21 天执行表 + 7 天缓冲
+## 6. 21 天执行表 + 7 天缓冲
 
 每天 6 h。**每天必须落一个可验证文件。**
 
@@ -314,7 +245,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 | Day | 日期 | 任务 | 产物 | 验收 |
 | --- | --- | --- | --- | --- |
-| **1** | 10/19 | **服务器侧**：`nvidia-smi`、`docker --version`、`python3 -V`、conda/venv 建 3.10 env；拉仓库；`docker compose -f data/C9/docker-compose.yml up -d`；确认 `neo4j-init` 退出码 0；跑计数查询。**本机侧**：读代码（已完成 §2） | `results/neo4j_stats.json`、`docs/env.md` | 计数与 §2.5 预期值一致或差异有解释 |
+| **1** | 10/19 | **服务器侧**：`nvidia-smi`、`docker --version`、`python3 -V`、conda/venv 建 3.10 env；拉仓库；`docker compose -f data/C9/docker-compose.yml up -d`；确认 `neo4j-init` 退出码 0；跑计数查询。**本机侧**：读代码通读 `main.py` / `config.py` / `rag_modules/` | `results/neo4j_stats.json`、`docs/env.md` | 计数与 CSV 统计一致或差异有解释 |
 | **2** | 10/20 | ① `config.py` 改环境变量 + `to_dict()` 落盘 ② `main.py` 加 `--question/--batch/--mode` ③ Milvus 起（或 Milvus Lite 兜底）④ 跑通 3 个问题 | `results/smoke_trace.jsonl` | `--question` 单条可跑 |
 | **3** | 10/21 | 实体链接器：Aho-Corasick 匹配 3229 个实体 + `synonyms` 扩展；20 条中文 query 人工核验 | `rag_modules/entity_linker.py` + 单测 | 准确率 ≥ 85% |
 | **4** | 10/22 | 修 `_find_entity_relations`：一跳真实 Cypher，保留 nodeId / relId / 方向 | 代码 + `results/path_samples.json` | 能返回真实路径并贴出 nodeId |
@@ -334,7 +265,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 | --- | --- | --- | --- | --- |
 | **8** | 10/26 | `rag_modules/evidence.py`：统一 Evidence（evidence_id, source, node_ids, edge_ids, score, verified）+ 跨源去重 | 代码 + `tests/test_evidence.py` | 同事实跨源去重有 case |
 | **9** | 10/27 | 证据子图构建 + `assess()` 连通性判定 | `rag_modules/sufficiency.py` | 正例判充分、"两实体无关联"反例判不足 |
-| **10** | 10/28 | **E1：判定器 AUC 实验**（见 §8，项目成立与否看这个） | `results/e1_auc.json` | AUC > 0.7 才继续 |
+| **10** | 10/28 | **E1：判定器 AUC 实验**（见 §7，项目成立与否看这个） | `results/e1_auc.json` | AUC > 0.7 才继续 |
 | **11** | 10/29 | `evidence_controller.py`：状态机 + 预算 + 动作选择 | 代码 + `tests/test_controller.py` | 不死循环、不超预算、Mock 可测 |
 | **12** | 10/30 | Oracle 动作序列表 + **E2：Agent 决策指标** | `results/oracle.json`、`results/e2_agent.json` | 决策准确率可算 |
 | **13** | 10/31 | 接入 `--mode baseline/adaptive`，跑 40 条 dev | `results/adaptive_dev.jsonl` | 每条有 state→action 轨迹 |
@@ -375,13 +306,13 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 | **23** | 11/10 | `scripts/run_baseline.py` / `run_experiment.py` / `smoke_test.py` 一键复现 |
 | **24** | 11/11 | README 重写（问题→方法→实验→限制）+ 架构图 |
 | **25** | 11/12 | 简历 3 条（只用实测数字）+ 2 / 5 分钟讲述稿 |
-| **26** | 11/13 | 模拟面试：§10 全部 20 题 |
+| **26** | 11/13 | 模拟面试：§9 全部 20 题 |
 | **27** | 11/14 | limitations 文档（把失败变成 future work） |
 | **28** | 11/15 | 全新环境复现 + Release tag |
 
 ---
 
-## 8. E1：判定器有效性（项目成立的核心证据）
+## 7. E1：判定器有效性（项目成立的核心证据）
 
 **问题**：连通性覆盖判定，是否比 top-k 相似度更能预测"证据是否真的充分"？
 
@@ -404,7 +335,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 9. E4 / E5：鲁棒性与模型无关性
+## 8. E4 / E5：鲁棒性与模型无关性
 
 **E4 图扰动**：按 10% / 20% / 30% 随机删边（每条边以固定 seed 删除），重跑 Ours vs B3 vs B5。看指标衰减曲线。
 
@@ -415,7 +346,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 10. 模拟面试 20 题（每周日取 5–8 题，不给准备时间）
+## 9. 模拟面试 20 题（每周日取 5–8 题，不给准备时间）
 
 评分：🟢 能扛 2 层追问 · 🟡 能说结论但追问露馅 · 🔴 说不清
 
@@ -452,13 +383,13 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 11. 风险与降级
+## 10. 风险与降级
 
 | 风险 | 触发信号 | 动作 |
 | --- | --- | --- |
 | 服务器 Docker 不可用 | Day 1 | Neo4j：`neo4j` 官方 tarball + JRE；Milvus：Milvus Lite（`pymilvus` 直连 `./milvus.db`，无需 Docker） |
 | GPU 显存不够跑 7B | Day 2 | 降到 Qwen2.5-3B 或 4bit 更激进量化；embedding 走 CPU |
-| 判定器无效 | Day 10 AUC < 0.6 | 按 §7 三条诊断；仍不行则降级为启发式，负结果写进报告 |
+| 判定器无效 | Day 10 AUC < 0.6 | 按 §6 三条诊断；仍不行则降级为启发式，负结果写进报告 |
 | Benchmark 质量差 | Day 6 可回查率 < 80% | 缩到 80 条，保质量 |
 | Ours 不如 B3 | Week 3 | 写"为什么没赢"，仍是合格交付 |
 | 时间不够 | 任一周末 Go/No-Go 失败 | 砍 A4/A5/A6、砍 E5，保 MVP |
@@ -473,7 +404,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 12. 每日工作流
+## 11. 每日工作流
 
 1. **开始**：写下今天要产出的**文件名**（不是"学习 X"）
 2. **结束**：`git commit`，message 写"做了什么 + 产物路径"
@@ -493,7 +424,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 13. 许可与归属
+## 12. 许可与归属
 
 上游 CC BY-NC-SA 4.0：非商业、相同方式共享、保留署名。仓库 `UPSTREAM.md` 已声明来源与许可。
 
@@ -503,51 +434,7 @@ Dev 40 / Test 160，**按实体分组划分**防泄漏。Test 在 Day 17 冻结�
 
 ---
 
-## 附 A：Day 1 收尾清单（今天，服务器上执行）
-
-```bash
-# 1. 硬件与系统
-nvidia-smi
-python3 -V
-docker --version && docker compose version
-
-# 2. 建环境（若已有 conda）
-conda create -n graphrag python=3.10 -y && conda activate graphrag
-
-# 3. 仓库
-git clone https://github.com/xxiiiixx/Evidence-Guided-Agentic-GraphRAG.git
-cd Evidence-Guided-Agentic-GraphRAG
-
-# 4. 起 Neo4j 并导入
-docker compose -f data/C9/docker-compose.yml up -d
-docker ps -a          # 等 neo4j-db healthy、neo4j-init 退出码 0
-docker logs neo4j-init | tail -30
-
-# 5. 计数
-docker exec neo4j-db cypher-shell -u neo4j -p all-in-rag \
-  "MATCH (n) RETURN labels(n) AS label, count(*) AS cnt ORDER BY cnt DESC;"
-docker exec neo4j-db cypher-shell -u neo4j -p all-in-rag \
-  "MATCH ()-[r]->() RETURN type(r) AS t, count(*) AS cnt ORDER BY cnt DESC;"
-```
-
-把上面**每一行的原始输出**贴回来，我据此写 `results/neo4j_stats.json` 和 `docs/env.md`。
-
-**预期值**（按 CSV 统计，以数据库为准）：
-
-| 节点 | 预期 | 关系 | 预期 |
-| --- | ---: | --- | ---: |
-| Ingredient | 2906 | REQUIRES (801000001) | 2905 |
-| CookingStep | 2514 | CONTAINS_STEP (801000003) | 2514 |
-| Recipe | 323 | BELONGS_TO (801000004) | 322 |
-| RecipeCategory | 9 | DIFFICULTY_LEVEL (801000005) | 314 |
-
-> `nodes.csv` 每类第一行是类型元节点（如 `300000000,Ingredient,食材,...`），导入后可能差 1，属正常，记录下来即可。
-
-**若第 1 步就卡住，立刻停下来告诉我，不要自己硬扛。**
-
----
-
-## 附 B：待确认事项（影响后续设计，但不阻塞 Day 1）
+## 附 A：待确认事项（影响后续设计，但不阻塞 Day 1）
 
 1. 服务器是否已装 Docker？若无，能否装（sudo 权限）？
 2. 服务器是独占还是多人共享？能长期占着 Neo4j 容器吗？

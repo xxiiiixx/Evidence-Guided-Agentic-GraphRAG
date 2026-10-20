@@ -22,7 +22,7 @@
 | --- | --- | --- | --- | --- |
 | **1** | 10/20 | 服务器：`nvidia-smi`、`docker --version`、`python3 -V`、conda 建 3.10 env；拉仓库；`docker compose -f data/C9/docker-compose.yml up -d`；确认 `neo4j-init` 退出码 0；跑节点/关系计数 | `results/neo4j_stats.json`、`docs/day01.md` | 计数与 CSV 统计一致或差异有解释 |
 | **2** | 10/21 | ① `config.py` 改环境变量 + `to_dict()` 落盘 ② `main.py` 加 `--question/--batch/--mode` ③ Milvus 起（失败则 Milvus Lite） ④ **起本地模型服务（vLLM/Ollama，OpenAI 兼容）并改 `base_url`** ⑤ 跑通 3 个问题 | `results/smoke_trace.jsonl` | `--question` 单条可跑，且不依赖 Moonshot API |
-| **3** | 10/22 | **★ 图重建**：按 `name` 合并食材节点（2905 → 758，268 个跨菜谱）；重写导入 Cypher；重导并验证 | 新 `neo4j_import.cypher` + `results/graph_rebuild.json` | `REQUIRES` 变多对多；**存在 ≥2 道菜共享的食材**；度数分布有数 |
+| **3** | 10/22 | **★ 图重建**（四件事，Day 1 普查后细化）：① 按 `name` 合并食材 2905 → 758（268 个跨菜谱）② **同义词归一**：大蒜/蒜、食用油/油、白糖/糖、姜/生姜、葱/小葱、酱油/生抽 等，`synonyms` 字段不含这些，需手工规则表 ③ **剔除派生节点与伪关系**：GraphStatistics/RelationshipStatistics 等 42 节点、SIMILAR/USES_SAME_TOOL/USES_SAME_METHOD 等 14193 条 `LIMIT 1000` 截断边 ④ **剔除器具误抽**（刷子/保鲜膜/蘸料碟）并补齐缺失的 4 类 RecipeCategory 节点（半成品/凉菜/下酒菜/减肥餐，涉及 13 道菜）；重写导入 Cypher 后重导 | 新 `neo4j_import.cypher` + `results/graph_rebuild.json` | `REQUIRES` 变多对多；**被 ≥2 道菜共享的食材节点从 0 → 268**；食材名 759 → 758 附近；派生节点/伪关系数为 0；13 道菜的 category 不再丢 |
 | **4** | 10/23 | 实体链接器：Aho-Corasick 匹配 758 食材 + 322 菜谱 + `synonyms`；20 条中文 query 人工核验 | `rag_modules/entity_linker.py` + 单测 | 准确率 ≥ 85% |
 | **5** | 10/24 | 修 `_find_entity_relations`：一跳真实 Cypher，保留 nodeId / relId / 方向 | 代码 + `results/path_samples.json` | 能返回真实路径并贴出 nodeId |
 | **6** | 10/25 | 修 `_find_shortest_paths`：`shortestPath` + 深度/条数上限 | 代码 + `tests/test_graph_paths.py` | 两跳可查，无路径爆炸 |

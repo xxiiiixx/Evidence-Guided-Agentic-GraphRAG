@@ -5,7 +5,9 @@
 
 import os
 import sys
+import json
 import time
+import argparse
 import logging
 from typing import List, Optional
 
@@ -25,10 +27,22 @@ from rag_modules import (
 )
 from rag_modules.hybrid_retrieval import HybridRetrievalModule
 from rag_modules.graph_rag_retrieval import GraphRAGRetrieval
-from rag_modules.intelligent_query_router import IntelligentQueryRouter, QueryAnalysis
+from rag_modules.intelligent_query_router import (
+    IntelligentQueryRouter,
+    QueryAnalysis,
+    SearchStrategy,
+)
 
 # 加载环境变量
 load_dotenv()
+
+# --mode 取值 -> SearchStrategy；auto 表示走 LLM 路由
+MODE_TO_STRATEGY = {
+    "hybrid": SearchStrategy.HYBRID_TRADITIONAL,
+    "graph": SearchStrategy.GRAPH_RAG,
+    "combined": SearchStrategy.COMBINED,
+}
+MODE_CHOICES = ["auto", "hybrid", "graph", "combined"]
 
 class AdvancedGraphRAGSystem:
     """
@@ -87,7 +101,9 @@ class AdvancedGraphRAGSystem:
             self.generation_module = GenerationIntegrationModule(
                 model_name=self.config.llm_model,
                 temperature=self.config.temperature,
-                max_tokens=self.config.max_tokens
+                max_tokens=self.config.max_tokens,
+                base_url=self.config.llm_base_url,
+                api_key_env=self.config.llm_api_key_env,
             )
             
             # 4. 传统混合检索模块
@@ -301,6 +317,111 @@ class AdvancedGraphRAGSystem:
     
 
     
+    def ask_question(self, question: str, mode: str = "auto", trace_path: Optional[str] = None):
+        """非交互问答入口。
+
+        mode:
+            auto     - 走 LLM 智能路由（现有行为）
+            hybrid   - 强制仅传统混合检索（B1）
+            graph    - 强制仅图检索（B2）
+            combined - 强制两路合并（B4）
+
+        返回 dict，同时按需追加一行 JSON 到 trace_path。
+        """
+        if not self.system_ready:
+            raise ValueError("系统未就绪，请先构建知识库")
+
+        if mode not in MODE_CHOICES:
+            raise ValueError(f"未知 mode: {mode}，可选 {MODE_CHOICES}")
+
+        started = time.time()
+        analysis = None
+
+        if mode == "auto":
+            docs, analysis = self.query_router.route_query(question, self.config.top_k)
+        else:
+            docs = self.query_router.search_with_strategy(
+                question, MODE_TO_STRATEGY[mode], self.config.top_k
+            )
+
+        retrieved_ms = int((time.time() - started) * 1000)
+
+        if not docs:
+            answer = "抱歉，没有找到相关的烹饪信息。请尝试其他问题。"
+        else:
+            answer = self.generation_module.generate_adaptive_answer(question, docs)
+
+        latency_ms = int((time.time() - started) * 1000)
+
+        record = {
+            "question": question,
+            "mode": mode,
+            "strategy": analysis.recommended_strategy.value if analysis else mode,
+            "num_docs": len(docs),
+            "docs": [
+                {
+                    "recipe": d.metadata.get("recipe_name", ""),
+                    "node_id": d.metadata.get("recipe_id", d.metadata.get("node_id", "")),
+                    "score": d.metadata.get("final_score", d.metadata.get("relevance_score", 0)),
+                    "source": d.metadata.get("search_type", d.metadata.get("search_source", "")),
+                }
+                for d in docs
+            ],
+            "answer": answer,
+            "retrieved_ms": retrieved_ms,
+            "latency_ms": latency_ms,
+            "llm_model": self.config.llm_model,
+        }
+
+        if trace_path:
+            os.makedirs(os.path.dirname(trace_path) or ".", exist_ok=True)
+            with open(trace_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+        return record
+
+    def run_batch(self, path: str, mode: str = "auto", trace_path: Optional[str] = None,
+                  limit: Optional[int] = None) -> List[dict]:
+        """批量跑一组问题。输入支持 .jsonl（每行含 question）或 .txt（每行一个问题）。"""
+        questions = []
+        with open(path, encoding="utf-8") as f:
+            if path.endswith(".jsonl"):
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    obj = json.loads(line)
+                    questions.append(obj.get("question") or obj.get("q") or "")
+            else:
+                questions = [line.strip() for line in f if line.strip()]
+
+        if limit:
+            questions = questions[:limit]
+
+        results = []
+        for i, q in enumerate(questions, 1):
+            print(f"\n[{i}/{len(questions)}] {q}")
+            try:
+                rec = self.ask_question(q, mode=mode, trace_path=trace_path)
+                print(f"   -> {len(rec['docs'])} docs, {rec['latency_ms']} ms")
+                results.append(rec)
+            except Exception as e:
+                logger.error(f"问题处理失败: {q} -> {e}")
+                results.append({"question": q, "error": str(e)})
+        return results
+
+    def write_config_snapshot(self, path: str = "results/config_snapshot.json"):
+        """把运行时配置落盘，便于复现（密码已脱敏）。"""
+        os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+        snapshot = {
+            "captured_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            "config": self.config.to_dict(mask_secrets=True),
+            "modes": MODE_CHOICES,
+        }
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(snapshot, f, ensure_ascii=False, indent=2)
+        print(f"配置快照已写入 {path}")
+
     def run_interactive(self):
         """运行交互式问答"""
         if not self.system_ready:
@@ -414,28 +535,92 @@ class AdvancedGraphRAGSystem:
         if self.index_module:
             self.index_module.close()
 
-def main():
+def parse_args(argv=None):
+    """命令行参数。不带参数时保持原来的交互式行为。"""
+    parser = argparse.ArgumentParser(
+        description="Evidence-Guided Agentic GraphRAG - 烹饪知识问答"
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("--question", "-q", type=str, help="单条问题，跑完即退出")
+    group.add_argument("--batch", "-b", type=str, help="批量问题文件（.jsonl 或 .txt，每行一个问题）")
+
+    parser.add_argument(
+        "--mode", "-m",
+        choices=MODE_CHOICES,
+        default="auto",
+        help="检索引擎选择：auto=LLM路由，hybrid=B1，graph=B2，combined=B4",
+    )
+    parser.add_argument("--top-k", type=int, default=None, help="检索条数，默认取配置")
+    parser.add_argument("--limit", type=int, default=None, help="批量模式下最多跑几条")
+    parser.add_argument(
+        "--trace",
+        type=str,
+        default=None,
+        help="trace 落盘路径（jsonl），默认 results/smoke_trace.jsonl（非交互模式）",
+    )
+    parser.add_argument("--no-build", action="store_true", help="跳过知识库构建（已构建过时更快）")
+    parser.add_argument("--stream", action="store_true", help="单条模式下流式输出")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
     """主函数"""
+    args = parse_args(argv)
+
     try:
         print("启动高级图RAG系统...")
-        
-        # 创建高级图RAG系统
-        rag_system = AdvancedGraphRAGSystem()
-        
-        # 初始化系统
+
+        config = GraphRAGConfig()
+        if args.top_k:
+            config.top_k = args.top_k
+
+        rag_system = AdvancedGraphRAGSystem(config=config)
         rag_system.initialize_system()
-        
-        # 构建知识库
-        rag_system.build_knowledge_base()
-        
-        # 运行交互式问答
+
+        if not args.no_build:
+            rag_system.build_knowledge_base()
+
+        # 配置落盘，保证可复现
+        rag_system.write_config_snapshot()
+
+        # 非交互模式：trace 默认落到 results/smoke_trace.jsonl
+        trace_path = args.trace
+        if trace_path is None and (args.question or args.batch):
+            trace_path = "results/smoke_trace.jsonl"
+
+        if args.question:
+            record = rag_system.ask_question(args.question, mode=args.mode, trace_path=trace_path)
+            print("\n" + "=" * 60)
+            print(f"问题: {record['question']}")
+            print(f"模式: {record['mode']}  检索文档: {record['num_docs']}  耗时: {record['latency_ms']} ms")
+            print("=" * 60)
+            print(record["answer"])
+            print("=" * 60)
+            if trace_path:
+                print(f"trace 已追加: {trace_path}")
+            return 0
+
+        if args.batch:
+            results = rag_system.run_batch(
+                args.batch, mode=args.mode, trace_path=trace_path, limit=args.limit
+            )
+            ok = sum(1 for r in results if "error" not in r)
+            print(f"\n批量完成: {ok}/{len(results)} 成功")
+            if trace_path:
+                print(f"trace 已追加: {trace_path}")
+            return 0
+
+        # 无参数：保持交互式
         rag_system.run_interactive()
-        
+        return 0
+
     except Exception as e:
         logger.error(f"系统运行失败: {e}")
         import traceback
         traceback.print_exc()
         print(f"\n❌ 系统错误: {e}")
+        return 1
 
 if __name__ == "__main__":
+    sys.exit(main())
     main() 

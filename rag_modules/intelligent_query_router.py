@@ -204,6 +204,35 @@ class IntelligentQueryRouter:
             documents = self.traditional_retrieval.hybrid_search(query, top_k)
             return documents, analysis
     
+    def search_with_strategy(
+        self,
+        query: str,
+        strategy: "SearchStrategy",
+        top_k: int = 5,
+    ) -> List[Document]:
+        """按指定策略检索，不做 LLM 路由判断。
+
+        与 route_query 的区别：route_query 让 LLM 决定用哪条路，
+        本方法强制走某条路，用于实验对照（B1/B2/B4）与 --mode 参数。
+        """
+        logger.info(f"强制策略检索: {strategy.value}")
+
+        if strategy == SearchStrategy.HYBRID_TRADITIONAL:
+            documents = self.traditional_retrieval.hybrid_search(query, top_k)
+        elif strategy == SearchStrategy.GRAPH_RAG:
+            documents = self.graph_rag_retrieval.graph_rag_search(query, top_k)
+        elif strategy == SearchStrategy.COMBINED:
+            documents = self._combined_search(query, top_k)
+        else:
+            raise ValueError(f"未知策略: {strategy}")
+
+        # 打上与 route_query 一致的元数据，便于统一分析
+        for doc in documents:
+            doc.metadata["route_strategy"] = strategy.value
+
+        self._update_route_stats(strategy)
+        return documents
+
     def _combined_search(self, query: str, top_k: int) -> List[Document]:
         """
         组合搜索策略：结合传统检索和图RAG的优势

@@ -15,25 +15,36 @@ logger = logging.getLogger(__name__)
 class GenerationIntegrationModule:
     """生成集成模块 - 负责答案生成"""
 
-    def __init__(self, model_name: str = "kimi-k2-0711-preview", temperature: float = 0.1, max_tokens: int = 2048):
+    def __init__(
+        self,
+        model_name: str = "Qwen/Qwen2.5-72B-Instruct",
+        temperature: float = 0.1,
+        max_tokens: int = 2048,
+        base_url: str = "https://api-inference.modelscope.cn/v1",
+        api_key_env: str = "MODELSCOPE_API_KEY",
+    ):
         """
         初始化生成集成模块
+
+        base_url / api_key_env 可配置，以支持不同 OpenAI 兼容端点
+        （魔搭、Moonshot、本地 vLLM 等），换模型不必改代码。
         """
         self.model_name = model_name
         self.temperature = temperature
         self.max_tokens = max_tokens
-        
-        # 初始化OpenAI客户端（使用Moonshot API）
-        api_key = os.getenv("MOONSHOT_API_KEY")
+        self.base_url = base_url
+        self.api_key_env = api_key_env
+
+        api_key = os.getenv(api_key_env)
         if not api_key:
-            raise ValueError("请设置 MOONSHOT_API_KEY 环境变量")
-        
+            raise ValueError(f"请设置 {api_key_env} 环境变量")
+
         self.client = OpenAI(
             api_key=api_key,
-            base_url="https://api.moonshot.cn/v1"
+            base_url=base_url
         )
 
-        logger.info(f"生成模块初始化完成，模型: {model_name}")
+        logger.info(f"生成模块初始化完成，模型: {model_name}，端点: {base_url}")
 
     def generate_adaptive_answer(self, question: str, documents: List[Document]) -> str:
         """

@@ -125,6 +125,7 @@ CY "MATCH (r:Recipe)-[:REQUIRES]->(i:Ingredient)
     RETURN count(r) AS recipes_with_2plus_ingredients;"
 
 echo "--- 采样一条真实路径（用于 path_samples 格式确认）---"
+echo "(中文若显示为 ???，是 cypher-shell 经管道时的 locale 问题，不影响数据本身)"
 CY "MATCH p = (r:Recipe)-[:REQUIRES]->(i:Ingredient)
     RETURN r.nodeId AS recipe_id, r.name AS recipe_name,
            i.nodeId AS ingredient_id, i.name AS ingredient_name
@@ -160,11 +161,20 @@ nodes_raw, rels_raw = sys.argv[1], sys.argv[2]
 commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
 
 def parse(block):
+    """解析 cypher-shell --format plain 输出。
+
+    注意：cypher-shell 给字符串列加双引号（如 `"Ingredient", 2906`），
+    必须剥掉，否则键会变成 '"Ingredient"'，与预期表的 'Ingredient' 对不上。
+    """
     out = {}
     for line in block.splitlines():
         parts = [p.strip() for p in line.split(",")]
-        if len(parts) >= 2 and parts[1].isdigit():
-            out[parts[0]] = int(parts[1])
+        if len(parts) < 2:
+            continue
+        key = parts[0].strip('"').strip("'").strip()
+        val = parts[1].strip('"').strip("'").strip()
+        if key and key.lower() != "label" and val.isdigit():
+            out[key] = int(val)
     return out
 
 data = {
@@ -177,12 +187,27 @@ data = {
         "nodes": {
             "Ingredient": 2906, "CookingStep": 2514, "Recipe": 323,
             "RecipeCategory": 9, "DifficultyLevel": 5,
-            "Root": 1, "CookingMethod": 1, "CookingTool": 1
+            "Root": 2, "CookingMethod": 1, "CookingTool": 1,
+            "Category": 19, "ConceptType": 8,
+            "GraphStatistics": 8, "RelationshipStatistics": 7
         },
-        "relationships": {"REQUIRES": 2905, "CONTAINS_STEP": 2514, "BELONGS_TO": 314, "DIFFICULTY_LEVEL": 322},
-        "totals": {"nodes": 5761, "relationships": 6055},
-        "note": "CSV 5760 行节点 + Root 重复导入 1 次 = 5761。Root 出现在两个 LOAD CSV 分支："
-                "nodeId<'200000000' 与 NOT labels IN (Recipe,Ingredient,CookingStep)（后者缺 ID 下界）。"
+        "relationships": {
+            "REQUIRES": 2905, "CONTAINS_STEP": 2514,
+            "BELONGS_TO": 314, "DIFFICULTY_LEVEL": 322,
+            "HAS_CONCEPT_TYPE": 5761, "BELONGS_TO_CATEGORY": 3233,
+            "NEXT_STEP": 2199, "SIMILAR": 1000,
+            "USES_SAME_TOOL": 1000, "USES_SAME_METHOD": 1000
+        },
+        "totals": {"nodes": 5803, "relationships": 20248},
+        "csv_only": {
+            "nodes": 5760,
+            "relationships": 6055
+        },
+        "note": "总数 5803 = CSV 5760 + 脚本派生 42(Category 19/ConceptType 8/"
+                "GraphStatistics 8/RelationshipStatistics 7) + Root 重复导入 1。"
+                "关系 20248 = CSV 6055 + 脚本派生 14193(HAS_CONCEPT_TYPE/BELONGS_TO_CATEGORY/"
+                "NEXT_STEP/SIMILAR/USES_SAME_TOOL/USES_SAME_METHOD)。"
+                "Root 重复：两个 LOAD CSV 分支都命中，第二个缺 ID 下界。"
                 "Ingredient 2906 含元节点 300000000(食材)，真实食材 2905。"
                 "BELONGS_TO/DifficultyLevel 映射见 neo4j_import.cypher:198-199"
     }
@@ -198,32 +223,49 @@ import json
 with open("results/neo4j_stats.json", encoding="utf-8") as f:
     d = json.load(f)
 exp = d["expected_from_csv"]
-print(f"{'类型':<20}{'实际':>8}{'预期':>8}{'差异':>8}")
-print("-" * 44)
-for kind in ("nodes", "relationships"):
+
+CSV_NODES = {"Ingredient", "CookingStep", "Recipe", "RecipeCategory",
+             "DifficultyLevel", "Root", "CookingMethod", "CookingTool"}
+CSV_RELS = {"REQUIRES", "CONTAINS_STEP", "BELONGS_TO", "DIFFICULTY_LEVEL"}
+
+def show(title, kind, csv_keys):
+    print(f"\n--- {title} ---")
+    print(f"{'类型':<26}{'实际':>8}{'预期':>8}{'差异':>8}  来源")
+    print("-" * 66)
+    bad = 0
     for k, v in exp[kind].items():
         actual = d[kind].get(k, 0)
         diff = actual - v
-        flag = "" if diff == 0 else ("  <-- 检查" if abs(diff) > 1 else "  (元节点)")
-        print(f"{k:<20}{actual:>8}{v:>8}{diff:>+8}{flag}")
+        src = "CSV" if k in csv_keys else "脚本派生"
+        flag = "" if diff == 0 else "  <-- 检查"
+        if diff != 0:
+            bad += 1
+        print(f"{k:<26}{actual:>8}{v:>8}{diff:>+8}  {src}{flag}")
+    return bad
 
-# 总数（含未单列的 label），这是 Day 1 的真正验收口径
-print()
-tot = exp.get("totals", {})
-for kind, actual_total in (
-    ("nodes", sum(d["nodes"].values())),
-    ("relationships", sum(d["relationships"].values())),
-):
-    want = tot.get(kind)
-    if want is None:
-        continue
-    diff = actual_total - want
-    flag = "" if diff == 0 else "  <-- 检查"
-    print(f"{'TOTAL '+kind:<20}{actual_total:>8}{want:>8}{diff:>+8}{flag}")
+bad = show("节点", "nodes", CSV_NODES)
+bad += show("关系", "relationships", CSV_RELS)
+
+print("\n--- 总数 ---")
+print(f"{'类型':<26}{'实际':>8}{'预期':>8}{'差异':>8}")
+print("-" * 50)
+for kind in ("nodes", "relationships"):
+    a = sum(d[kind].values())
+    v = exp["totals"][kind]
+    diff = a - v
+    if diff != 0:
+        bad += 1
+    print(f"{'TOTAL ' + kind:<26}{a:>8}{v:>8}{diff:>+8}{'' if diff == 0 else '  <-- 检查'}")
+
+# 与纯 CSV 层面比对：确认原始数据没丢
+print("\n--- 与纯 CSV 行数比对（确认原始数据未丢失）---")
+print(f"CSV 原始节点行数          5760 ; 数据库中 CSV 来源节点 {sum(d['nodes'].get(k,0) for k in CSV_NODES)}"
+      f" （差 1 = Root 重复导入）")
+print(f"CSV 原始关系行数          6055 ; 数据库中 CSV 来源关系 {sum(d['relationships'].get(k,0) for k in CSV_RELS)}")
 
 print()
-print("说明：Root 计为 2 属已知行为（导入脚本两个分支都命中）；"
-      "Ingredient 2906 含元节点 300000000。")
+print(f"结论：{'全部一致' if bad == 0 else f'{bad} 项不符，见 <-- 检查'}")
+print("说明：脚本派生节点/关系来自 neo4j_import.cypher 第 215-320 行的自动生成逻辑，属预期行为。")
 PY
 
 hr "done"

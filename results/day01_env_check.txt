@@ -1,0 +1,170 @@
+
+=== 0. meta ===
+captured_at: 2026-10-20T06:21:15+00:00
+hostname:    370bf48160f0
+user:        root
+repo_root:   /workspace
+git_commit:  e9fc6a0f00aaa5444d2a3bd53b10b56f7c2f609b
+git_status:  1 modified files
+
+=== 1. OS / kernel ===
+$ bash -c cat /etc/os-release 2>/dev/null | head -4
+PRETTY_NAME="Ubuntu 24.04.3 LTS"
+NAME="Ubuntu"
+VERSION_ID="24.04"
+VERSION="24.04.3 LTS (Noble Numbat)"
+$ uname -a
+Linux 370bf48160f0 6.6.92-34.1.tl4.x86_64 #1 SMP PREEMPT_DYNAMIC Wed Jun 25 14:33:47 CST 2025 x86_64 x86_64 x86_64 GNU/Linux
+$ uname -m
+x86_64
+$ bash -c free -h 2>/dev/null || true
+               total        used        free      shared  buff/cache   available
+Mem:            30Gi       6.8Gi        15Gi        40Mi       9.5Gi        24Gi
+Swap:             0B          0B          0B
+$ bash -c df -h . 2>/dev/null | tail -2
+Filesystem      Size  Used Avail Use% Mounted on
+overlay         256G  9.9G  245G   4% /
+
+=== 2. CPU ===
+$ nproc
+8
+$ bash -c grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2 || true
+ Intel(R) Xeon(R) Platinum 8255C CPU @ 2.50GHz
+
+=== 3. GPU ===
+$ nvidia-smi
+Tue Oct 20 06:21:16 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 580.65.06              Driver Version: 580.65.06      CUDA Version: 13.0     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla T4                       On  |   00000000:00:09.0 Off |                    0 |
+| N/A   33C    P8             15W /   70W |       0MiB /  15360MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+$ nvidia-smi --query-gpu=index,name,memory.total,memory.used,memory.free,driver_version,compute_cap --format=csv
+index, name, memory.total [MiB], memory.used [MiB], memory.free [MiB], driver_version, compute_cap
+0, Tesla T4, 15360 MiB, 0 MiB, 14913 MiB, 580.65.06, 7.5
+$ bash -c nvidia-smi | grep -i "CUDA Version" || true
+| NVIDIA-SMI 580.65.06              Driver Version: 580.65.06      CUDA Version: 13.0     |
+
+=== 4. Python ===
+$ python3 -V
+Python 3.10.22
+$ bash -c command -v python || echo "no python alias"
+/root/miniconda/envs/graphrag/bin/python
+$ bash -c command -v conda && conda --version || echo "no conda"
+/root/miniconda/condabin/conda
+conda 23.5.2
+$ bash -c conda env list 2>/dev/null || true
+# conda environments:
+#
+base                     /root/miniconda
+graphrag              *  /root/miniconda/envs/graphrag
+$ bash -c python3 -m pip --version 2>&1 || true
+pip 26.2.1 from /root/miniconda/envs/graphrag/lib/python3.10/site-packages/pip (python 3.10)
+
+=== 5. Docker ===
+$ docker --version
+Docker version 27.5.1, build 9f9e405
+$ docker compose version
+Docker Compose version v2.33.0
+$ bash -c docker info 2>&1 | head -20
+Client:
+ Version:    27.5.1
+ Context:    default
+ Debug Mode: false
+ Plugins:
+  buildx: Docker Buildx (Docker Inc.)
+    Version:  v0.20.1
+    Path:     /usr/local/libexec/docker/cli-plugins/docker-buildx
+  compose: Docker Compose (Docker Inc.)
+    Version:  v2.33.0
+    Path:     /usr/local/libexec/docker/cli-plugins/docker-compose
+
+Server:
+ Containers: 0
+  Running: 0
+  Paused: 0
+  Stopped: 0
+ Images: 0
+ Server Version: 27.5.1
+ Storage Driver: overlay2
+$ docker ps -a
+CONTAINER ID   IMAGE     COMMAND   CREATED   STATUS    PORTS     NAMES
+$ bash -c id -nG | tr ' ' '\n' | grep -x docker || echo 'user NOT in docker group -> need sudo'
+user NOT in docker group -> need sudo
+
+=== 6. Java (Neo4j 社区版 tarball 需要 JRE 17/21) ===
+$ bash -c command -v java && java -version 2>&1 || echo "no java"
+/root/.sdkman/candidates/java/current/bin/java
+openjdk version "20" 2023-03-21
+OpenJDK Runtime Environment Zulu20.28+85-CA (build 20+36)
+OpenJDK 64-Bit Server VM Zulu20.28+85-CA (build 20+36, mixed mode, sharing)
+
+=== 7. 网络（只测连通性，不下大文件） ===
+$ bash -c curl --version | head -1
+curl 8.5.0 (x86_64-pc-linux-gnu) libcurl/8.5.0 OpenSSL/3.0.13 zlib/1.3 brotli/1.1.0 zstd/1.5.5 libidn2/2.3.7 libpsl/0.21.2 (+libidn2/2.3.7) libssh/0.10.6/openssl/zlib nghttp2/1.59.0 librtmp/2.3 OpenLDAP/2.6.7
+$ curl -sS -o /dev/null -w "%{http_code}" --max-time 10 https://huggingface.co
+huggingface -> 200
+$ curl -sS -o /dev/null -w "%{http_code}" --max-time 10 https://www.modelscope.cn
+modelscope -> 302
+$ curl -sS -o /dev/null -w "%{http_code}" --max-time 10 https://pypi.org/simple/
+pypi -> 200
+
+=== 8. 仓库文件盘点 ===
+$ bash -c ls -la
+total 52
+drwxr-xr-x 1 root root   250 Oct 20 06:14 .
+drwxr-xr-x 1 root root   160 Oct 20 06:21 ..
+-rw-r--r-- 1 root root  2771 Oct 14 06:23 config.py
+drwxr-xr-x 1 root root     4 Oct 14 06:23 data
+drwxr-xr-x 1 root root    28 Oct 20 06:09 docs
+-rw-r--r-- 1 root root   401 Oct 14 06:23 .env.example
+drwxr-xr-x 1 root root   154 Oct 20 06:21 .git
+-rw-r--r-- 1 root root   384 Oct 20 06:09 .gitattributes
+-rw-r--r-- 1 root root   341 Oct 20 06:09 .gitignore
+-rw-r--r-- 1 root root 16864 Oct 14 06:23 main.py
+drwxr-xr-x 1 root root   348 Oct 14 06:23 rag_modules
+-rw-r--r-- 1 root root  7414 Oct 20 06:09 README.md
+-rw-r--r-- 1 root root   554 Oct 14 06:23 requirements.txt
+drwxr-xr-x 1 root root    54 Oct 20 06:21 results
+drwxr-xr-x 1 root root    70 Oct 20 06:09 scripts
+-rw-r--r-- 1 root root   966 Oct 14 06:23 UPSTREAM.md
+$ bash -c for f in data/C9/cypher/*.csv; do printf "%-40s %s lines\n" "$f" "$(wc -l < "$f")"; done
+data/C9/cypher/nodes.csv                 5761 lines
+data/C9/cypher/relationships.csv         6056 lines
+$ bash -c find . -name "*.py" -not -path "./.git/*" | xargs wc -l 2>/dev/null | tail -12
+    80 ./config.py
+   440 ./main.py
+    14 ./rag_modules/__init__.py
+   174 ./rag_modules/generation_integration.py
+   457 ./rag_modules/graph_data_preparation.py
+   386 ./rag_modules/graph_indexing.py
+   700 ./rag_modules/graph_rag_retrieval.py
+   798 ./rag_modules/hybrid_retrieval.py
+   306 ./rag_modules/intelligent_query_router.py
+   502 ./rag_modules/milvus_index_construction.py
+  3857 total
+
+=== 9. 目录约定检查 ===
+results              EXISTS
+docs                 EXISTS
+scripts              EXISTS
+evaluation           MISSING (later)
+tests                MISSING (later)
+data/benchmark       MISSING (later)
+
+=== done ===
+把以上完整输出贴回给导师（或保存为 results/day01_env_check.txt）

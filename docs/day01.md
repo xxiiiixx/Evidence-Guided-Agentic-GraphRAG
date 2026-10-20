@@ -170,7 +170,59 @@ REQUIRES 关系带 `amount` 的 2896/2905（99.7%）。
 > （`CookingTool` 节点全库只有 1 个元节点）。若要支持「哪道菜用蒸锅」这类问题，
 > 需要把 269 个工具名实体化。
 
-**⑤ 少量字段异常。** 1 道菜（半成品意面）步骤编号重复 `1..5` 两轮；
+**⑤ 存在一条完全重复的菜谱。**
+
+`陈皮排骨汤` 有两条记录（`201003873` / `201004002`），**食材与 7 个步骤逐字相同**，
+仅元数据略有出入：
+
+| 字段 | 201003873 | 201004002 |
+| --- | --- | --- |
+| difficulty | 4.0 | 3.0 |
+| prepTime | 5分钟 | 10分钟 |
+| tags | `广东老火靓汤,熬夜党必备,注意防烫` | `...,养生,注意防烫` |
+| filePath | `dishes\soup\陈皮排骨汤.md` | `dishes\soup\陈皮排骨汤\陈皮排骨汤.md` |
+
+> 从 `filePath` 可看出是两个目录结构下的同一道菜被各抽了一遍。
+> 影响：322 道菜实为 **321 道唯一菜**；造 Benchmark 时若两条都进样本，
+> 同一问题会有两个「正确答案」，评测会失真。Day 3 重建时应去重。
+
+**⑥ `category` 字段在不同 label 下语义完全不同。**
+
+同一个字段名被复用为两套互不兼容的枚举：
+
+| label | 取值 | 含义 |
+| --- | --- | --- |
+| Recipe | 荤菜/素菜/主食/水产/早餐/饮料/汤类/甜品/半成品/调料/凉菜/下酒菜/减肥餐（13 种） | **菜品类型** |
+| Ingredient | 调料/蔬菜/蛋白质/其他/淀粉类/脂肪/工具（7 种） | **食材类别** |
+
+> 影响：任何 `WHERE n.category = '调料'` 的查询会**同时命中菜谱和食材**。
+> 导入脚本 `MATCH (n) WHERE n.category ...` 建 `Category` 节点时正是如此，
+> 导致那 19 个派生 Category 节点混装两种语义。
+
+**⑦ 11 个名字跨 label 重复。** 同一道菜既是 `Recipe` 又是 `Ingredient`：
+
+```
+小龙虾 · 手抓饼 · 速冻水饺 · 凉皮 · 凉粉 · 油酥 · 油泼辣子
+蔗糖糖浆 · 牛排 · 速冻馄饨 · 速冻汤圆
+```
+
+> 语义上没错（小龙虾既是食材也能做成一道菜），但**实体链接器按名字匹配时会歧义**：
+> 用户问「小龙虾怎么做」，应链接到 Recipe；问「哪道菜用小龙虾」，应链接到 Ingredient。
+> Day 4 的链接器需要**类型消歧**，不能只按名字匹配。
+
+**⑧ 宽表稀疏，23 个字段里每个 label 只用一部分。**
+
+| label | 用到字段 | 典型全空字段 |
+| --- | ---: | --- |
+| Recipe | 15/23 | amount/unit/isMain/description/stepNumber/methods/tools/timeEstimate |
+| Ingredient | 11/23 | difficulty/cuisineType/prepTime/cookTime/servings/tags/filePath/description… |
+| CookingStep | 10/23 | fsn/synonyms/category/difficulty/cuisineType/prepTime… |
+
+整表非空率仅 **41.5%**（55020 / 132480 单元格）。这是**宽表设计**的必然结果，
+不是数据缺失——`description` 只在 CookingStep 上有值，`amount`/`unit` 只在 Ingredient 上有值。
+但要注意：**不能用「字段非空率」判断数据质量**，必须按 label 分别看。
+
+**⑨ 少量字段异常。** 1 道菜（半成品意面）步骤编号重复 `1..5` 两轮；
 1 道菜的 `servings` 为空；9 条 REQUIRES 的 `amount` 为空但 `unit='适量'`；
 152 条有 `amount` 无 `unit`；3 个食材名含数字（`100°C沸水`、`30°C温水`、`52%VOL白酒`）。
 

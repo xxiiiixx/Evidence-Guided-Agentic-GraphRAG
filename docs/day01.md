@@ -214,8 +214,8 @@ REQUIRES 关系带 `amount` 的 2896/2905（99.7%）。
 
 | label | 用到字段 | 典型全空字段 |
 | --- | ---: | --- |
-| Recipe | 15/23 | amount/unit/isMain/description/stepNumber/methods/tools/timeEstimate |
-| Ingredient | 11/23 | difficulty/cuisineType/prepTime/cookTime/servings/tags/filePath/description… |
+| Recipe | 14/23 | fsn/amount/unit/isMain/description/stepNumber/methods/tools/timeEstimate |
+| Ingredient | 10/23 | fsn/difficulty/cuisineType/prepTime/cookTime/servings/tags/filePath/description… |
 | CookingStep | 10/23 | fsn/synonyms/category/difficulty/cuisineType/prepTime… |
 
 整表非空率仅 **41.5%**（55020 / 132480 单元格）。这是**宽表设计**的必然结果，
@@ -223,7 +223,7 @@ REQUIRES 关系带 `amount` 的 2896/2905（99.7%）。
 但要注意：**不能用「字段非空率」判断数据质量**，必须按 label 分别看。
 
 **⑨ 少量字段异常。** 1 道菜（半成品意面）步骤编号重复 `1..5` 两轮；
-1 道菜的 `servings` 为空；9 条 REQUIRES 的 `amount` 为空但 `unit='适量'`；
+1 道菜的 `servings` 为空；9 条 REQUIRES 的 `amount` 为空（其中 8 条 `unit='适量'`、1 条 `unit='可选'`）；
 152 条有 `amount` 无 `unit`；3 个食材名含数字（`100°C沸水`、`30°C温水`、`52%VOL白酒`）。
 
 ## 3. 数据库实际状态

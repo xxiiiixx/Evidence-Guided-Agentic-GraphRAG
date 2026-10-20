@@ -20,7 +20,7 @@
 
 | Day | 日期 | 任务 | 产物 | 验收 |
 | --- | --- | --- | --- | --- |
-| **1** | 10/20 | 服务器：`nvidia-smi`、`docker --version`、`python3 -V`、conda 建 3.10 env；拉仓库；`docker compose -f data/C9/docker-compose.yml up -d`；确认 `neo4j-init` 退出码 0；跑节点/关系计数 | `results/neo4j_stats.json`、`docs/env.md` | 计数与 CSV 统计一致或差异有解释 |
+| **1** | 10/20 | 服务器：`nvidia-smi`、`docker --version`、`python3 -V`、conda 建 3.10 env；拉仓库；`docker compose -f data/C9/docker-compose.yml up -d`；确认 `neo4j-init` 退出码 0；跑节点/关系计数 | `results/neo4j_stats.json`、`docs/day01.md` | 计数与 CSV 统计一致或差异有解释 |
 | **2** | 10/21 | ① `config.py` 改环境变量 + `to_dict()` 落盘 ② `main.py` 加 `--question/--batch/--mode` ③ Milvus 起（失败则 Milvus Lite） ④ **起本地模型服务（vLLM/Ollama，OpenAI 兼容）并改 `base_url`** ⑤ 跑通 3 个问题 | `results/smoke_trace.jsonl` | `--question` 单条可跑，且不依赖 Moonshot API |
 | **3** | 10/22 | **★ 图重建**：按 `name` 合并食材节点（2905 → 758，268 个跨菜谱）；重写导入 Cypher；重导并验证 | 新 `neo4j_import.cypher` + `results/graph_rebuild.json` | `REQUIRES` 变多对多；**存在 ≥2 道菜共享的食材**；度数分布有数 |
 | **4** | 10/23 | 实体链接器：Aho-Corasick 匹配 758 食材 + 322 菜谱 + `synonyms`；20 条中文 query 人工核验 | `rag_modules/entity_linker.py` + 单测 | 准确率 ≥ 85% |

@@ -4,7 +4,7 @@
 
 基于 [Datawhale / all-in-rag](https://github.com/datawhalechina/all-in-rag) 的 C9 GraphRAG 教学项目二次开发，聚焦 Agent / RAG 算法方向的系统性实验。
 
-**当前状态：Day 1 / 28，环境尚未跑通，无任何性能数据。** 本仓库在实验完成前不会出现任何未经运行的指标。
+**当前状态：Day 1 / 28 完成。环境已验证，图数据库已落地，无任何性能数据。** 本仓库在实验完成前不会出现任何未经运行的指标。
 
 ---
 
@@ -62,7 +62,7 @@ RAG Agent 的核心动作是「检索 → 判断够不够 → 决定继续还是
 
 | 周 | 时间 | 目标 | 状态 |
 | --- | --- | --- | --- |
-| W1 | Day 1–7 | 服务器环境、图检索修复、Benchmark 40 条 | ⬜ |
+| W1 | Day 1–7 | 服务器环境、图检索修复、Benchmark 40 条 | 🔄 Day 1 |
 | W2 | Day 8–14 | 判定器 + 控制器 + Agent 决策指标 | ⬜ |
 | W3 | Day 15–21 | 对照实验、六组消融、鲁棒性 | ⬜ |
 | 缓冲 | Day 22–28 | 复现、README、面试打磨 | ⬜ |
@@ -71,9 +71,10 @@ RAG Agent 的核心动作是「检索 → 判断够不够 → 决定继续还是
 
 - 上游 C9 源码（`main.py`、`config.py`、`rag_modules/`）与 Neo4j 导入数据（`data/C9/`）
 - 28 天计划（[docs/28_day_plan.md](./docs/28_day_plan.md)）
-- Day 1 环境与数据库自检脚本（`scripts/`）
+- Day 1 环境与数据库自检脚本（`scripts/`）；环境已验证（T4 15GB，Ubuntu 24.04，Python 3.10.22）
+- Neo4j 已落地：5803 节点 / 20248 关系（[Day 1 记录](./docs/day01.md)）
 
-**当前没有的**：任何运行记录、Benchmark、指标、模型配置。**尚无性能结论。**
+**当前没有的**：任何检索运行记录、Benchmark、指标、模型配置。**尚无性能结论。**
 
 ---
 
@@ -132,7 +133,8 @@ rag_modules/
 data/C9/                     Neo4j compose、Cypher 导入、CSV 数据
 scripts/                     Day 1 自检脚本
 docs/
-  28_day_plan.md             28 天计划（唯一计划文档）
+  28_day_plan.md             28 天计划（只写计划，不记执行过程）
+  day01.md                   Day 1 执行记录（环境、基线、bug、面试问答）
 ```
 
 ---
@@ -140,6 +142,9 @@ docs/
 ## 文档
 
 - [28 天计划](./docs/28_day_plan.md) —— 28 天逐日安排：任务、产物、验收（只写计划，不记执行过程）
+- [Day 1 记录](./docs/day01.md) —— 环境快照、数据库基线、修复的 bug、面试问答
+
+每日记录独立存放，不与计划文档混写。
 
 ---
 

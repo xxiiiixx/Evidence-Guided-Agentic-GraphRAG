@@ -51,6 +51,7 @@ class GraphRAGConfig:
 
     # 模型配置
     embedding_model: str = ""
+    embedding_device: str = ""     # cpu / cuda / cuda:0；cuda 不可用时自动降级
     llm_model: str = ""
     llm_base_url: str = ""
     llm_api_key_env: str = ""
@@ -87,6 +88,8 @@ class GraphRAGConfig:
         self.embedding_model = self.embedding_model or _env(
             "EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5"
         )
+        # 默认 cpu 保证开箱可跑；有 GPU 的机器在 .env 里设 EMBEDDING_DEVICE=cuda
+        self.embedding_device = self.embedding_device or _env("EMBEDDING_DEVICE", "cpu")
         # 默认值必须选魔搭推理 API 上有可用 provider 的模型。
         self.llm_model = self.llm_model or _env(
             "LLM_MODEL", "Qwen/Qwen3.8-Flash-Next"
@@ -129,6 +132,7 @@ class GraphRAGConfig:
             'milvus_collection_name': self.milvus_collection_name,
             'milvus_dimension': self.milvus_dimension,
             'embedding_model': self.embedding_model,
+            'embedding_device': self.embedding_device,
             'llm_model': self.llm_model,
             'llm_base_url': self.llm_base_url,
             'llm_api_key_env': self.llm_api_key_env,

@@ -39,7 +39,8 @@ class MilvusIndexConstructionModule:
                  collection_name: str = "cooking_knowledge",
                  dimension: int = 512,
                  model_name: str = "BAAI/bge-small-zh-v1.5",
-                 uri: Optional[str] = None):
+                 uri: Optional[str] = None,
+                 embedding_device: str = "cpu"):
         """
         初始化Milvus索引构建模块
 
@@ -53,6 +54,8 @@ class MilvusIndexConstructionModule:
                  - "http://host:port"          连独立 Milvus 服务
                  - "./milvus_data.db" 等本地路径  使用 Milvus Lite（嵌入式）
                  uri 优先于 host/port。
+            embedding_device: 嵌入模型运行设备，"cpu" / "cuda" / "cuda:0"。
+                 由 EMBEDDING_DEVICE 环境变量控制，不改代码即可切换。
         """
         self.host = host
         self.port = port
@@ -63,6 +66,7 @@ class MilvusIndexConstructionModule:
         self.collection_name = collection_name
         self.dimension = dimension
         self.model_name = model_name
+        self.embedding_device = embedding_device
         
         self.client = None
         self.embeddings = None
@@ -112,16 +116,36 @@ class MilvusIndexConstructionModule:
             raise
     
     def _setup_embeddings(self):
-        """初始化嵌入模型"""
-        logger.info(f"正在初始化嵌入模型: {self.model_name}")
-        
+        """初始化嵌入模型。
+
+        device 由配置传入（EMBEDDING_DEVICE）。若请求 cuda 但当前环境不可用，
+        自动降级为 cpu 并打 warning——避免把机器相关配置写进代码后换机器就崩。
+        """
+        device = self.embedding_device
+
+        if device.startswith("cuda"):
+            try:
+                import torch
+                available = torch.cuda.is_available()
+            except Exception:
+                available = False
+            if not available:
+                logger.warning(
+                    "请求 embedding_device=%s 但当前环境 CUDA 不可用，已降级为 cpu。"
+                    "（检查驱动 / torch 是否带 CUDA）",
+                    device,
+                )
+                device = "cpu"
+
+        logger.info(f"正在初始化嵌入模型: {self.model_name} (device={device})")
+
         self.embeddings = HuggingFaceEmbeddings(
             model_name=self.model_name,
-            model_kwargs={'device': 'cpu'},
+            model_kwargs={'device': device},
             encode_kwargs={'normalize_embeddings': True}
         )
-        
-        logger.info("嵌入模型初始化完成")
+
+        logger.info(f"嵌入模型初始化完成 (device={device})")
     
     def _create_collection_schema(self) -> CollectionSchema:
         """

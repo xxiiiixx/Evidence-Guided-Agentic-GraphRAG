@@ -88,8 +88,6 @@ class GraphRAGConfig:
             "EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5"
         )
         # 默认值必须选魔搭推理 API 上有可用 provider 的模型。
-        # 实测 Qwen/Qwen2.5-72B-Instruct 会返回
-        #   400 'Model id has no provider supported'
         self.llm_model = self.llm_model or _env(
             "LLM_MODEL", "Qwen/Qwen3.8-Flash-Next"
         )

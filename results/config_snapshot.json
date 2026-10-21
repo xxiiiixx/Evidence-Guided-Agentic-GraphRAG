@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-10-21T10:53:34+0000",
+  "captured_at": "2026-10-21T14:04:00+0000",
   "config": {
     "neo4j_uri": "bolt://localhost:7687",
     "neo4j_user": "neo4j",
@@ -11,6 +11,7 @@
     "milvus_collection_name": "cooking_knowledge",
     "milvus_dimension": 512,
     "embedding_model": "BAAI/bge-small-zh-v1.5",
+    "embedding_device": "cuda",
     "llm_model": "Qwen/Qwen3.8-Flash-Next",
     "llm_base_url": "https://api-inference.modelscope.cn/v1",
     "llm_api_key_env": "MODELSCOPE_API_KEY",

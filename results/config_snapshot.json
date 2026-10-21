@@ -1,0 +1,33 @@
+{
+  "captured_at": "2026-10-21T10:53:34+0000",
+  "config": {
+    "neo4j_uri": "bolt://localhost:7687",
+    "neo4j_user": "neo4j",
+    "neo4j_password": "***",
+    "neo4j_database": "neo4j",
+    "milvus_host": "localhost",
+    "milvus_port": 19530,
+    "milvus_lite_path": "./milvus_data.db",
+    "milvus_collection_name": "cooking_knowledge",
+    "milvus_dimension": 512,
+    "embedding_model": "BAAI/bge-small-zh-v1.5",
+    "llm_model": "Qwen/Qwen3.8-Flash-Next",
+    "llm_base_url": "https://api-inference.modelscope.cn/v1",
+    "llm_api_key_env": "MODELSCOPE_API_KEY",
+    "top_k": 5,
+    "enable_parent_doc_retrieval": false,
+    "parent_doc_top_n": 3,
+    "parent_doc_max_chars": 4000,
+    "temperature": 0.1,
+    "max_tokens": 2048,
+    "chunk_size": 500,
+    "chunk_overlap": 50,
+    "max_graph_depth": 2
+  },
+  "modes": [
+    "auto",
+    "hybrid",
+    "graph",
+    "combined"
+  ]
+}

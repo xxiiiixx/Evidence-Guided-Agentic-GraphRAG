@@ -3,8 +3,25 @@ Milvus索引构建模块
 """
 
 import logging
+import os
 import time
 from typing import List, Dict, Any, Optional
+
+# pymilvus 在 import 阶段会读取环境变量 MILVUS_URI，并强制要求它是
+# http(s)://host:port 形式。若环境里残留一个本地路径（例如误配成
+# Milvus Lite 的 ./xxx.db），import 会直接抛 ConnectionConfigException。
+# 这里在本模块 import pymilvus 之前清掉，避免误配导致无法启动。
+_milvus_uri_env = os.getenv("MILVUS_URI", "")
+if _milvus_uri_env and (
+    _milvus_uri_env.startswith(("./", "../", "/")) or _milvus_uri_env.endswith(".db")
+):
+    logger_placeholder = logging.getLogger(__name__)
+    logger_placeholder.warning(
+        "检测到 MILVUS_URI=%s 不是 http(s) 形式，已清除以避免 pymilvus import 失败。"
+        "Milvus Lite 请改用 MILVUS_LITE_PATH。",
+        _milvus_uri_env,
+    )
+    os.environ.pop("MILVUS_URI", None)
 
 from pymilvus import MilvusClient, DataType, CollectionSchema, FieldSchema
 from langchain_huggingface import HuggingFaceEmbeddings

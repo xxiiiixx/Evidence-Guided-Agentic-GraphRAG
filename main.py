@@ -94,7 +94,7 @@ class AdvancedGraphRAGSystem:
                 collection_name=self.config.milvus_collection_name,
                 dimension=self.config.milvus_dimension,
                 model_name=self.config.embedding_model,
-                uri=self.config.milvus_uri or None,
+                uri=self.config.milvus_lite_path or None,
             )
             
             # 3. 生成模块

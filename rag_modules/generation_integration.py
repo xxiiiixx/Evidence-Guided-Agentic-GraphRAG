@@ -17,7 +17,7 @@ class GenerationIntegrationModule:
 
     def __init__(
         self,
-        model_name: str = "Qwen/Qwen2.5-72B-Instruct",
+        model_name: str = "Qwen/Qwen3.8-Flash-Next",
         temperature: float = 0.1,
         max_tokens: int = 2048,
         base_url: str = "https://api-inference.modelscope.cn/v1",

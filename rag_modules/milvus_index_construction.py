@@ -57,6 +57,9 @@ class MilvusIndexConstructionModule:
         self.host = host
         self.port = port
         self.uri = uri or f"http://{host}:{port}"
+        # 本地文件路径 -> Milvus Lite。Lite 只支持 FLAT / IVF_FLAT / AUTOINDEX，
+        # 不支持 HNSW，索引与搜索参数需区别对待。
+        self.is_lite = not self.uri.startswith(("http://", "https://", "tcp://"))
         self.collection_name = collection_name
         self.dimension = dimension
         self.model_name = model_name
@@ -90,16 +93,20 @@ class MilvusIndexConstructionModule:
         走 Milvus Lite（嵌入式，无需 Docker）。
         """
         try:
-            is_remote = self.uri.startswith(("http://", "https://", "tcp://"))
             self.client = MilvusClient(uri=self.uri)
             logger.info(
-                f"已连接到Milvus({'远程服务' if is_remote else 'Lite 本地文件'}): {self.uri}"
+                f"已连接到Milvus({'Lite 本地文件' if self.is_lite else '远程服务'}): {self.uri}"
             )
-            
-            # 测试连接
-            collections = self.client.list_collections()
-            logger.info(f"连接成功，当前集合: {collections}")
-            
+
+            # 连接自检：只做提示，失败不阻断启动。
+            # MilvusClient 构造成功即说明连接可用；list_collections 在部分
+            # Lite 版本上会因 proto 字段差异报错，不该因此拒绝启动。
+            try:
+                collections = self.client.list_collections()
+                logger.info(f"连接成功，当前集合: {collections}")
+            except Exception as probe_err:
+                logger.warning(f"连接自检失败（不影响使用）: {probe_err}")
+
         except Exception as e:
             logger.error(f"连接Milvus失败: {e}")
             raise
@@ -200,24 +207,32 @@ class MilvusIndexConstructionModule:
             
             # 使用prepare_index_params创建正确的IndexParams对象
             index_params = self.client.prepare_index_params()
-            
-            # 添加向量字段索引
-            index_params.add_index(
-                field_name="vector",
-                index_type="HNSW",
-                metric_type="COSINE",
-                params={
-                    "M": 16,
-                    "efConstruction": 200
-                }
-            )
-            
+
+            # Milvus Lite 只支持 FLAT / IVF_FLAT / AUTOINDEX，不支持 HNSW。
+            # 数据量约 3000 向量，FLAT 是精确检索，无需调参且结果可复现。
+            if self.is_lite:
+                index_params.add_index(
+                    field_name="vector",
+                    index_type="FLAT",
+                    metric_type="COSINE",
+                )
+            else:
+                index_params.add_index(
+                    field_name="vector",
+                    index_type="HNSW",
+                    metric_type="COSINE",
+                    params={
+                        "M": 16,
+                        "efConstruction": 200
+                    }
+                )
+
             self.client.create_index(
                 collection_name=self.collection_name,
                 index_params=index_params
             )
-            
-            logger.info("向量索引创建成功")
+
+            logger.info(f"向量索引创建成功（{'FLAT/Lite' if self.is_lite else 'HNSW'}）")
             return True
             
         except Exception as e:
@@ -391,9 +406,10 @@ class MilvusIndexConstructionModule:
                     filter_expr = " and ".join(filter_conditions)
             
             # 执行搜索 - 修复参数传递
+            # ef 是 HNSW 专有参数，FLAT 不需要，传了反而可能报错
             search_params = {
                 "metric_type": "COSINE",
-                "params": {"ef": 64}
+                "params": {} if self.is_lite else {"ef": 64},
             }
             
             # 构建搜索参数，避免重复传递

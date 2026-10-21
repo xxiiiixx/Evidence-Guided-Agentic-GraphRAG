@@ -42,6 +42,7 @@ class GraphRAGConfig:
     # Milvus配置
     milvus_host: str = ""
     milvus_port: int = 0
+    milvus_uri: str = ""            # 优先使用；空则按 host:port 拼 http 地址
     milvus_collection_name: str = "cooking_knowledge"
     milvus_dimension: int = 512  # BGE-small-zh-v1.5的向量维度
 
@@ -77,6 +78,8 @@ class GraphRAGConfig:
 
         self.milvus_host = self.milvus_host or _env("MILVUS_HOST", "localhost")
         self.milvus_port = self.milvus_port or _env_int("MILVUS_PORT", 19530)
+        # MILVUS_URI 为空时回落到 http://host:port（远程服务）；填本地路径则走 Lite
+        self.milvus_uri = self.milvus_uri or _env("MILVUS_URI", "")
 
         self.embedding_model = self.embedding_model or _env(
             "EMBEDDING_MODEL", "BAAI/bge-small-zh-v1.5"
@@ -118,6 +121,7 @@ class GraphRAGConfig:
             'neo4j_database': self.neo4j_database,
             'milvus_host': self.milvus_host,
             'milvus_port': self.milvus_port,
+            'milvus_uri': self.milvus_uri,
             'milvus_collection_name': self.milvus_collection_name,
             'milvus_dimension': self.milvus_dimension,
             'embedding_model': self.embedding_model,

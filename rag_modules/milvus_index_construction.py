@@ -21,19 +21,25 @@ class MilvusIndexConstructionModule:
                  port: int = 19530,
                  collection_name: str = "cooking_knowledge",
                  dimension: int = 512,
-                 model_name: str = "BAAI/bge-small-zh-v1.5"):
+                 model_name: str = "BAAI/bge-small-zh-v1.5",
+                 uri: Optional[str] = None):
         """
         初始化Milvus索引构建模块
 
         Args:
-            host: Milvus服务器地址
-            port: Milvus服务器端口
+            host: Milvus服务器地址（仅 uri 未指定时使用）
+            port: Milvus服务器端口（仅 uri 未指定时使用）
             collection_name: 集合名称
             dimension: 向量维度
             model_name: 嵌入模型名称
+            uri: 显式指定连接串。支持两种形式
+                 - "http://host:port"          连独立 Milvus 服务
+                 - "./milvus_data.db" 等本地路径  使用 Milvus Lite（嵌入式）
+                 uri 优先于 host/port。
         """
         self.host = host
         self.port = port
+        self.uri = uri or f"http://{host}:{port}"
         self.collection_name = collection_name
         self.dimension = dimension
         self.model_name = model_name
@@ -61,12 +67,17 @@ class MilvusIndexConstructionModule:
         return str(text)[:max_length]
     
     def _setup_client(self):
-        """初始化Milvus客户端"""
+        """初始化Milvus客户端。
+
+        uri 以 http(s):// 开头时连远程服务；否则视为本地文件路径，
+        走 Milvus Lite（嵌入式，无需 Docker）。
+        """
         try:
-            self.client = MilvusClient(
-                uri=f"http://{self.host}:{self.port}"
+            is_remote = self.uri.startswith(("http://", "https://", "tcp://"))
+            self.client = MilvusClient(uri=self.uri)
+            logger.info(
+                f"已连接到Milvus({'远程服务' if is_remote else 'Lite 本地文件'}): {self.uri}"
             )
-            logger.info(f"已连接到Milvus服务器: {self.host}:{self.port}")
             
             # 测试连接
             collections = self.client.list_collections()

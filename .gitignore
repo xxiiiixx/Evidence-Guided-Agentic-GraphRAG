@@ -11,6 +11,11 @@ logs/
 outputs/
 neo4j_data/
 milvus_data/
+# Milvus Lite 生成的单文件数据库
+milvus_data.db
+milvus_data.db.lock
+*.db-shm
+*.db-wal
 
 # 说明：results/ 下的产物（统计、指标、trace）是运行证据，必须提交，
 # 因此不忽略。只忽略体积可能很大的中间缓存。

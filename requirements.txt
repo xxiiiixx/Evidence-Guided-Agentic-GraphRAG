@@ -12,6 +12,7 @@ unstructured-client==0.41.0
 neo4j>=5.0.0
 
 pymilvus==2.5.11
+milvus-lite>=2.4.0        # Milvus Lite 嵌入式模式（Docker 不可用时的兜底）
 rank-bm25>=0.2.2
 jieba>=0.42.1
 

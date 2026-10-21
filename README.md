@@ -4,7 +4,7 @@
 
 基于 [Datawhale / all-in-rag](https://github.com/datawhalechina/all-in-rag) 的 C9 GraphRAG 教学项目二次开发，聚焦 Agent / RAG 算法方向的系统性实验。
 
-**当前状态：Day 1 / 28 完成。环境已验证，图数据库已落地，无任何性能数据。** 本仓库在实验完成前不会出现任何未经运行的指标。
+**当前状态：Day 2 / 28 完成。端到端链路已跑通 1 条（hybrid 模式 Top-1 命中），尚无自建 Benchmark 与对比指标。** 本仓库在实验完成前不会出现任何未经运行的指标。
 
 ---
 
@@ -62,7 +62,7 @@ RAG Agent 的核心动作是「检索 → 判断够不够 → 决定继续还是
 
 | 周 | 时间 | 目标 | 状态 |
 | --- | --- | --- | --- |
-| W1 | Day 1–7 | 服务器环境、图检索修复、Benchmark 40 条 | 🔄 Day 1 |
+| W1 | Day 1–7 | 服务器环境、图检索修复、Benchmark 40 条 | 🔄 Day 2 |
 | W2 | Day 8–14 | 判定器 + 控制器 + Agent 决策指标 | ⬜ |
 | W3 | Day 15–21 | 对照实验、六组消融、鲁棒性 | ⬜ |
 | 缓冲 | Day 22–28 | 复现、README、面试打磨 | ⬜ |
@@ -73,8 +73,9 @@ RAG Agent 的核心动作是「检索 → 判断够不够 → 决定继续还是
 - 28 天计划（[docs/28_day_plan.md](./docs/28_day_plan.md)）
 - Day 1 环境与数据库自检脚本（`scripts/`）；环境已验证（T4 15GB，Ubuntu 24.04，Python 3.10.22）
 - Neo4j 已落地：5803 节点 / 20248 关系（[Day 1 记录](./docs/day01.md)）
+- 端到端链路已通：Neo4j → 分块 → BGE → Milvus Lite → hybrid 检索 → 生成（[Day 2 记录](./docs/day02.md)）
 
-**当前没有的**：任何检索运行记录、Benchmark、指标、模型配置。**尚无性能结论。**
+**当前没有的**：自建 Benchmark、对比指标、消融结果。**尚无性能结论。**
 
 ---
 
@@ -109,9 +110,15 @@ bash scripts/day01_db_check.sh       # 数据库统计 → results/neo4j_stats.j
 ```bash
 conda create -n graphrag python=3.10 -y && conda activate graphrag
 pip install -r requirements.txt
-cp .env.example .env                 # 填入 MOONSHOT_API_KEY 等
-python main.py                       # 交互式 CLI（批量入口 Day 2 加上）
+cp .env.example .env                 # 填入 MODELSCOPE_API_KEY
+python main.py -q "咖喱炒蟹怎么做？" -m hybrid
 ```
+
+LLM 走 OpenAI 兼容端点（默认魔搭），换成本地 vLLM 只改 `.env` 的
+`LLM_BASE_URL` 与 `LLM_MODEL`，不动代码。
+
+向量库默认用 **Milvus Lite**（本地文件，无需 Docker）；置空
+`MILVUS_LITE_PATH` 即回落到 `MILVUS_HOST:MILVUS_PORT` 的独立服务。
 
 **安全提示**：`data/C9/docker-compose.yml` 里的 Neo4j 密码是上游演示值，仅适合隔离的本地环境，不要暴露公网。
 
@@ -120,11 +127,11 @@ python main.py                       # 交互式 CLI（批量入口 Day 2 加上
 ## 仓库结构
 
 ```
-config.py                    配置（当前为硬编码，Day 2 改为环境变量）
-main.py                      入口，AdvancedGraphRAGSystem
+config.py                    配置（环境变量驱动，支持端点/模型切换）
+main.py                      入口，AdvancedGraphRAGSystem；CLI 支持 -q/-b/-m
 rag_modules/
   graph_data_preparation.py  Neo4j → 菜谱文档 → 分块
-  milvus_index_construction.py  BGE embedding + Milvus HNSW
+  milvus_index_construction.py  BGE embedding + Milvus（Lite 用 FLAT，远程用 HNSW）
   hybrid_retrieval.py        Dual + Dense + BM25 → RRF
   graph_rag_retrieval.py     图查询意图 → 图路径 / 子图
   intelligent_query_router.py 一次性路由（Baseline）
@@ -134,7 +141,8 @@ data/C9/                     Neo4j compose、Cypher 导入、CSV 数据
 scripts/                     Day 1 自检脚本
 docs/
   28_day_plan.md             28 天计划（只写计划，不记执行过程）
-  day01.md                   Day 1 执行记录（环境、基线、bug、面试问答）
+  day01.md                   Day 1 执行记录（环境、数据基线、面试问答）
+  day02.md                   Day 2 执行记录（配置、CLI、Milvus Lite、实测）
 ```
 
 ---
@@ -142,7 +150,8 @@ docs/
 ## 文档
 
 - [28 天计划](./docs/28_day_plan.md) —— 28 天逐日安排：任务、产物、验收（只写计划，不记执行过程）
-- [Day 1 记录](./docs/day01.md) —— 环境快照、数据库基线、修复的 bug、面试问答
+- [Day 1 记录](./docs/day01.md) —— 环境快照、数据库基线、数据质量问题、面试问答
+- [Day 2 记录](./docs/day02.md) —— 配置环境变量化、CLI 设计、Milvus Lite 三个坑、实测结果
 
 每日记录独立存放，不与计划文档混写。
 

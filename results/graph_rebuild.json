@@ -1,0 +1,248 @@
+{
+  "generatedBy": "scripts/rebuild_graph.py",
+  "source": {
+    "nodes": "data\\C9\\cypher\\nodes.csv",
+    "relationships": "data\\C9\\cypher\\relationships.csv"
+  },
+  "before": {
+    "nodes": 5760,
+    "relationships": 6055,
+    "labels": {
+      "Ingredient": 2906,
+      "CookingStep": 2514,
+      "Recipe": 323,
+      "RecipeCategory": 9,
+      "DifficultyLevel": 5,
+      "Root": 1,
+      "CookingMethod": 1,
+      "CookingTool": 1
+    }
+  },
+  "after": {
+    "nodes": 3595,
+    "relationships": 6047,
+    "labels": {
+      "CookingStep": 2507,
+      "Ingredient": 746,
+      "Recipe": 321,
+      "RecipeCategory": 13,
+      "DifficultyLevel": 5,
+      "Root": 1,
+      "CookingMethod": 1,
+      "CookingTool": 1
+    },
+    "relTypes": {
+      "801000001": 2892,
+      "801000003": 2507,
+      "801000004": 327,
+      "801000005": 321
+    }
+  },
+  "acceptance": {
+    "recipes": 321,
+    "ingredients": 746,
+    "ingredientNames": 746,
+    "sharedIngredients": 255,
+    "sharedIngredientsRatio": 0.3418,
+    "requiresEdges": 2892,
+    "derivedNodes": 0,
+    "pseudoRelations": 0,
+    "recipeCategories": 13,
+    "recipesWithoutCategory": 0,
+    "crossLabelCategory": 0
+  },
+  "dropped": {
+    "templateNodes": [
+      "200000000",
+      "300000000"
+    ],
+    "utensils": [
+      {
+        "nodeId": "201000066",
+        "name": "刷子"
+      },
+      {
+        "nodeId": "201000833",
+        "name": "蘸料碟"
+      },
+      {
+        "nodeId": "201000869",
+        "name": "保鲜膜"
+      }
+    ],
+    "duplicateRecipe": {
+      "dropped": "201004002",
+      "kept": "201003873",
+      "name": "陈皮排骨汤",
+      "mergedTags": [
+        "广东老火靓汤",
+        "熬夜党必备",
+        "注意防烫",
+        "养生"
+      ],
+      "diff": {
+        "difficulty": [
+          "3.0",
+          "4.0"
+        ],
+        "prepTime": [
+          "10分钟",
+          "5分钟"
+        ],
+        "amounts": "201004002 全空，201003873 有克数"
+      }
+    },
+    "synonymGroups": [
+      {
+        "canonical": "大蒜",
+        "aliases": [
+          "蒜"
+        ],
+        "nodes": 84,
+        "keepId": "201000008"
+      },
+      {
+        "canonical": "姜",
+        "aliases": [
+          "生姜"
+        ],
+        "nodes": 77,
+        "keepId": "201000027"
+      },
+      {
+        "canonical": "料酒",
+        "aliases": [
+          "黄酒"
+        ],
+        "nodes": 75,
+        "keepId": "201000028"
+      },
+      {
+        "canonical": "淀粉",
+        "aliases": [
+          "生粉"
+        ],
+        "nodes": 39,
+        "keepId": "201000007"
+      },
+      {
+        "canonical": "生抽",
+        "aliases": [
+          "酱油"
+        ],
+        "nodes": 144,
+        "keepId": "201000029"
+      },
+      {
+        "canonical": "白糖",
+        "aliases": [
+          "糖"
+        ],
+        "nodes": 77,
+        "keepId": "201000050"
+      },
+      {
+        "canonical": "葱",
+        "aliases": [
+          "小葱"
+        ],
+        "nodes": 73,
+        "keepId": "201000062"
+      },
+      {
+        "canonical": "辣椒",
+        "aliases": [
+          "干辣椒"
+        ],
+        "nodes": 23,
+        "keepId": "201000077"
+      },
+      {
+        "canonical": "食用油",
+        "aliases": [
+          "油"
+        ],
+        "nodes": 143,
+        "keepId": "201000009"
+      }
+    ]
+  },
+  "added": {
+    "recipeCategories": {
+      "半成品": "800000000",
+      "凉菜": "810000000",
+      "下酒菜": "820000000",
+      "减肥餐": "830000000"
+    }
+  },
+  "amountMerges": [
+    {
+      "recipe": "201001944",
+      "ingredient": "201000028",
+      "before": [
+        [
+          "30-40",
+          "ml"
+        ],
+        [
+          "30-40",
+          "ml"
+        ]
+      ],
+      "after": [
+        "30-40",
+        "ml"
+      ]
+    },
+    {
+      "recipe": "201002035",
+      "ingredient": "201000029",
+      "before": [
+        [
+          "3",
+          "ml"
+        ],
+        [
+          "2",
+          "ml"
+        ]
+      ],
+      "after": [
+        "5",
+        "ml"
+      ]
+    },
+    {
+      "recipe": "201002434",
+      "ingredient": "201002123",
+      "before": [
+        [
+          "4",
+          "个"
+        ],
+        [
+          "400",
+          "克"
+        ]
+      ],
+      "after": [
+        "4个+400克",
+        ""
+      ]
+    }
+  ],
+  "finalize": {
+    "orphanStepsRemoved": [
+      "201004010",
+      "201004011",
+      "201004012",
+      "201004013",
+      "201004014",
+      "201004015",
+      "201004016"
+    ],
+    "sourceUniqueRelationshipIds": 254,
+    "relationshipIdsRenumbered": 6047
+  },
+  "unknownCategories": []
+}

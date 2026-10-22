@@ -137,12 +137,14 @@ rag_modules/
   intelligent_query_router.py 一次性路由（Baseline）
   graph_indexing.py          图实体/关系索引
   generation_integration.py  上下文拼接 + 生成
-data/C9/                     Neo4j compose、Cypher 导入、CSV 数据
-scripts/                     Day 1 自检脚本
+data/C9/                     Neo4j compose、Cypher 导入、CSV 数据（上游原样）
+data/rebuild/                Day 3 重建图：CSV + 精简导入脚本 + 独立 compose
+scripts/                     Day 1 自检脚本、Day 3 图重建脚本
 docs/
   28_day_plan.md             28 天计划（只写计划，不记执行过程）
   day01.md                   Day 1 执行记录（环境、数据基线、面试问答）
   day02.md                   Day 2 执行记录（配置、CLI、Milvus Lite、实测）
+  day03.md                   Day 3 执行记录（图重建、导入、数据质量问题）
 ```
 
 ---
@@ -152,6 +154,7 @@ docs/
 - [28 天计划](./docs/28_day_plan.md) —— 28 天逐日安排：任务、产物、验收（只写计划，不记执行过程）
 - [Day 1 记录](./docs/day01.md) —— 环境快照、数据库基线、数据质量问题、面试问答
 - [Day 2 记录](./docs/day02.md) —— 配置环境变量化、CLI 设计、Milvus Lite 三个坑、实测结果
+- [Day 3 记录](./docs/day03.md) —— 图重建（连通性 0 → 255）、导入脚本重写、发现的数据缺陷
 
 每日记录独立存放，不与计划文档混写。
 

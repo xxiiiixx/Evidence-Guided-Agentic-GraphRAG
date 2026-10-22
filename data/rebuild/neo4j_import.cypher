@@ -12,6 +12,9 @@
 //   * 不建 SIMILAR / USES_SAME_TOOL / USES_SAME_METHOD / NEXT_STEP / HAS_CONCEPT_TYPE
 //     （原脚本用 LIMIT 1000 截断生成 14193 条，既不是真实数据也破坏连通性判定）
 //   * category 已拆成 recipeCategory / ingredientCategory，不再跨 label 混用
+//   * isMain（主料/辅料）从 Ingredient 节点搬到 REQUIRES 边上——主料/辅料是相对某道菜
+//     而言的，同一样食材在 A 菜是主料、在 B 菜可能是辅料，属性本就该在边上。
+//     relationships.csv 因此比原文件多一列 isMain（8 列），仅 REQUIRES 行有值。
 //   * 不再需要 nodeId >= '200000000' 过滤：占位节点 200000000/300000000 已被删掉
 //   * 不依赖 APOC：动态标签用 5 段显式语句代替，关系类型直接写死
 //
@@ -163,6 +166,7 @@ MERGE (source)-[r:REQUIRES]->(target)
 SET r.relationshipId = row.relationshipId,
     r.amount         = CASE WHEN row.amount IN ['', 'null'] THEN null ELSE row.amount END,
     r.unit           = CASE WHEN row.unit IN ['', 'null'] THEN null ELSE row.unit END,
+    r.isMain         = (row.isMain = 'True'),
     r.originalType   = row.relationshipType
 RETURN count(r);
 
@@ -208,3 +212,9 @@ MATCH (:Recipe)-[:REQUIRES]->(i:Ingredient)
 WITH i, count(*) AS recipes
 WHERE recipes >= 2
 RETURN count(i) AS sharedIngredients, max(recipes) AS maxRecipes;
+
+// 连通性分层：全部食材 2892 条边，其中主料 650 条。
+// 只看主料时平均 1 跳可达 12.5 道菜、90 道菜孤立——说明连通主要由调料撑起，
+// Day 4 的实体链接和 Day 7 的 benchmark 要按 isMain 分组。
+MATCH ()-[r:REQUIRES]->() RETURN r.isMain AS isMain, count(*) AS n ORDER BY isMain DESC;
+

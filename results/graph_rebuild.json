@@ -231,6 +231,24 @@
       ]
     }
   ],
+  "connectivity": {
+    "allIngredients": {
+      "mean": 178.0,
+      "median": 213,
+      "max": 273,
+      "isolatedRecipes": 5,
+      "totalRecipes": 321
+    },
+    "mainIngredientsOnly": {
+      "mean": 12.5,
+      "median": 2,
+      "max": 69,
+      "isolatedRecipes": 90,
+      "totalRecipes": 321
+    },
+    "requiresEdgesMain": 650,
+    "requiresEdgesTotal": 2892
+  },
   "finalize": {
     "orphanStepsRemoved": [
       "201004010",

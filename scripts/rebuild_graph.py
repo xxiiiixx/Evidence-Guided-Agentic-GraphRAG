@@ -282,12 +282,20 @@ def build() -> dict:
     # REQUIRES：终点重映射到合并后的食材，并处理同菜谱同食材的多条
     req = rels[rels["relationshipType"] == REL_REQUIRES].copy()
     req = req[req["endNodeId"].isin(id_map)].copy()
+    # isMain（主料/辅料）原本是 Ingredient 节点上的属性。食材合并后属性搬到边上，
+    # 这个标记必须跟着搬——否则「只用主料」的消融做不了，连通性也看不出是不是靠调料撑起来的。
+    orig_is_main = dict(zip(nodes["nodeId"], nodes["isMain"]))
+    req["isMain"] = req["endNodeId"].map(lambda x: orig_is_main.get(x, "") == "True")
     req["endNodeId"] = req["endNodeId"].map(id_map)
     req["canonical"] = req["endNodeId"].map(dict(zip(out_nodes["nodeId"], out_nodes["name"])))
 
     grouped: dict[tuple[str, str], list] = defaultdict(list)
+    group_main: dict[tuple[str, str], bool] = defaultdict(bool)
     for row in req.itertuples(index=False):
-        grouped[(row.startNodeId, row.endNodeId)].append((row.amount, row.unit))
+        key = (row.startNodeId, row.endNodeId)
+        grouped[key].append((row.amount, row.unit))
+        if row.isMain:
+            group_main[key] = True
 
     req_rows, amount_merges = [], []
     for (start, end), pairs in grouped.items():
@@ -299,7 +307,8 @@ def build() -> dict:
         req_rows.append({"startNodeId": start, "endNodeId": end,
                          "relationshipType": REL_REQUIRES,
                          "relationshipId": "", "amount": amount or "",
-                         "unit": unit or "", "step_order": ""})
+                         "unit": unit or "", "step_order": "",
+                         "isMain": "True" if group_main[(start, end)] else "False"})
     req_out = pd.DataFrame(req_rows)
 
     # CONTAINS_STEP：原样保留
@@ -324,8 +333,11 @@ def build() -> dict:
     diff = rels[rels["relationshipType"] == REL_DIFFICULTY].copy()
 
     out_rels = pd.concat([req_out, step, bt_out, diff], ignore_index=True)
+    if "isMain" not in out_rels.columns:
+        out_rels["isMain"] = ""
+    out_rels["isMain"] = out_rels["isMain"].fillna("")
     out_rels = out_rels[["startNodeId", "endNodeId", "relationshipType",
-                         "relationshipId", "amount", "unit", "step_order"]]
+                         "relationshipId", "amount", "unit", "step_order", "isMain"]]
 
     # ---- 收尾 1：删掉因去重菜谱而失去父节点的 CookingStep -------------------
     linked_steps = set(out_rels.loc[out_rels["relationshipType"] == REL_CONTAINS_STEP, "endNodeId"])
@@ -355,6 +367,32 @@ def build() -> dict:
     req_final = out_rels[out_rels["relationshipType"] == REL_REQUIRES]
     per_ing = req_final.groupby("endNodeId")["startNodeId"].nunique()
     shared = int((per_ing >= 2).sum())
+
+    def hop_stats(edge_df: pd.DataFrame) -> dict:
+        """每道菜经「共享食材」1 跳可达的其他菜谱数。"""
+        by_ing: dict[str, set] = defaultdict(set)
+        for s, e in zip(edge_df["startNodeId"], edge_df["endNodeId"]):
+            by_ing[e].add(s)
+        reach: dict[str, set] = defaultdict(set)
+        for dishes in by_ing.values():
+            for d in dishes:
+                reach[d] |= (dishes - {d})
+        vals = sorted(len(reach.get(r, ())) for r in rec_out["nodeId"])
+        return {
+            "mean": round(sum(vals) / max(len(vals), 1), 1),
+            "median": vals[len(vals) // 2] if vals else 0,
+            "max": vals[-1] if vals else 0,
+            "isolatedRecipes": sum(1 for v in vals if v == 0),
+            "totalRecipes": len(vals),
+        }
+
+    main_only = req_final[req_final["isMain"] == "True"]
+    connectivity = {
+        "allIngredients": hop_stats(req_final),
+        "mainIngredientsOnly": hop_stats(main_only),
+        "requiresEdgesMain": int(len(main_only)),
+        "requiresEdgesTotal": int(len(req_final)),
+    }
 
     report = {
         "generatedBy": "scripts/rebuild_graph.py",
@@ -392,6 +430,7 @@ def build() -> dict:
         },
         "added": {"recipeCategories": {c: NEW_CATEGORIES[c] for c in added_cats}},
         "amountMerges": amount_merges,
+        "connectivity": connectivity,
         "finalize": {
             "orphanStepsRemoved": orphan_step_ids,
             "sourceUniqueRelationshipIds": old_rel_id_unique,

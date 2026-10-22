@@ -373,6 +373,11 @@ class AdvancedGraphRAGSystem:
             "retrieved_ms": retrieved_ms,
             "latency_ms": latency_ms,
             "llm_model": self.config.llm_model,
+            # 分段耗时（hybrid_search 写入；其他 mode 可能为空）
+            "timing": next(
+                (d.metadata.get("timing") for d in docs if d.metadata.get("timing")),
+                None,
+            ),
         }
 
         if trace_path:

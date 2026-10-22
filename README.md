@@ -138,7 +138,7 @@ rag_modules/
   graph_indexing.py          图实体/关系索引
   generation_integration.py  上下文拼接 + 生成
 data/C9/                     Neo4j compose、Cypher 导入、CSV 数据（上游原样）
-data/rebuild/                Day 3 重建图：CSV + 精简导入脚本 + 独立 compose
+data/rebuild/                Day 3 重建图：CSV + 精简导入脚本 + 独立 compose + 自检脚本
 scripts/                     Day 1 自检脚本、Day 3 图重建脚本
 docs/
   28_day_plan.md             28 天计划（只写计划，不记执行过程）

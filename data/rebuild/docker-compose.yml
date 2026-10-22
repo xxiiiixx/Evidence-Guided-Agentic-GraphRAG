@@ -1,0 +1,62 @@
+# Day 3 重建图专用 Neo4j 实例。
+#
+# 与 data/C9/docker-compose.yml 完全独立：不同的容器名、端口、数据卷，
+# 因此两套图可以同时跑，随时对比。
+#
+#   docker compose -f data/rebuild/docker-compose.yml up -d
+#   docker compose -f data/rebuild/docker-compose.yml logs -f neo4j-init
+#
+# 导入完成后：
+#   HTTP  http://localhost:7475   （neo4j / all-in-rag）
+#   Bolt  bolt://localhost:7688
+#
+# 让代码连这套图，在 .env 里加一行：
+#   NEO4J_URI=bolt://localhost:7688
+
+services:
+  neo4j:
+    image: neo4j:5.18
+    container_name: neo4j-rebuild
+    ports:
+      - 7475:7474   # HTTP，避开 C9 的 7474
+      - 7688:7687   # Bolt，避开 C9 的 7687
+    environment:
+      NEO4J_AUTH: neo4j/all-in-rag
+      NEO4J_dbms_security_allow__csv__import__from__file__urls: "true"
+      NEO4J_dbms_directories_import: "/import"
+      NEO4J_PLUGINS: '["apoc"]'
+    volumes:
+      - rebuild_neo4j_data:/data
+      - rebuild_neo4j_logs:/logs
+      - rebuild_neo4j_plugins:/plugins
+      # 本目录即 /import：neo4j_import.cypher 里的 file:///nodes.csv 指向同目录的 CSV
+      - ./:/import
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "all-in-rag", "RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  neo4j-init:
+    image: neo4j:5.18
+    container_name: neo4j-rebuild-init
+    depends_on:
+      neo4j:
+        condition: service_healthy
+    volumes:
+      - ./:/scripts
+    command: >
+      sh -c "
+        echo 'Waiting for Neo4j to be ready...' &&
+        sleep 10 &&
+        echo 'Executing import script...' &&
+        cypher-shell -a bolt://neo4j:7687 -u neo4j -p all-in-rag -f /scripts/neo4j_import.cypher &&
+        echo 'Import completed!'
+      "
+    restart: "no"
+
+volumes:
+  rebuild_neo4j_data:
+  rebuild_neo4j_logs:
+  rebuild_neo4j_plugins:

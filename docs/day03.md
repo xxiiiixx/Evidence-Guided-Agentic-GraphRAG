@@ -11,11 +11,11 @@
 2. 写 `scripts/rebuild_graph.py`，把原始 CSV 重建为 `data/rebuild/` 下的新 CSV
 3. 重写导入脚本 `data/rebuild/neo4j_import.cypher`，只建 8 类节点、4 类关系
 4. 给重建图配独立 Neo4j 实例（`data/rebuild/docker-compose.yml`，端口 7475/7688）
-5. 逐条核对计划里的 6 项验收
+5. 逐条核对计划里的验收项（见第 5 节）
 6. 写 `data/rebuild/day03_db_check.sh`：把重建图导进 Neo4j，再与 `data/rebuild/*.csv` 逐项比对
+7. 在服务器上实跑：导入 3595 节点 / 6047 关系，自检 52 项（40 个标量 + 8 类节点 + 4 类关系）全部一致
 
-未做：没有在服务器上实跑导入（本机无 Docker）。跑 `bash data/rebuild/day03_db_check.sh`
-即可完成端到端验证——它自己起实例、等导入、逐项对比，全部一致才返回 0。
+计划里的七件事到此全部落地，验收项逐条对上，重建图可以直接接 Day 4。
 
 ---
 
@@ -342,13 +342,18 @@ docker compose -f data/rebuild/docker-compose.yml logs -f neo4j-init
 # 4. 让代码连新图
 echo 'NEO4J_URI=bolt://localhost:7688' >> .env
 
+# 5. 端到端自检：自己起实例、等导入完成、与 CSV 逐项比对，全部一致才返回 0
+bash data/rebuild/day03_db_check.sh
+
 # 产物
 #   data/rebuild/nodes.csv           3595 行
 #   data/rebuild/relationships.csv   6047 行（第 8 列 isMain 是新增字段）
 #   results/graph_rebuild.json       每项 before/after + 合并明细 + 连通性统计
+#   results/day03_db_check.json      端到端自检结果（passed: true 才算过）
 ```
 
 导入脚本末尾自带三条自检查询，期望输出 3595 节点 / 6047 关系 / 255 个共享食材。
+2026-10-22 在服务器上实跑：52 项全部一致，`results/day03_db_check.json` 里 `passed: true`。
 
 ---
 
@@ -404,3 +409,22 @@ echo 'NEO4J_URI=bolt://localhost:7688' >> .env
 `isMain`、`amount`、`unit` 描述的都是这条边而不是食材本身——主料/辅料是相对某道菜而言的，
 同一样食材在 A 菜是主料、在 B 菜可能是辅料。放在节点上本身就是建模错误，
 原数据把它放在 Ingredient 上只是因为节点是按「菜谱 × 食材」逐条抽出来的，一节点对一菜谱，才碰巧成立。
+
+**Q8：自检脚本里为什么把中文写成 `\u751F\u62BD` 这种转义？**
+
+第一次在服务器上跑，52 项里有 7 项不符，而且恰好是 7 项带中文字面量的查询
+（`WHERE r.name = '陈皮排骨汤'`、`MATCH (i:Ingredient {name:'生抽'})` 之类），
+其余 45 项结构类指标一项不差——失败集合和「含中文的查询」完全重合。
+
+顺着这条线排：脚本里的中文在 `echo` 里显示正常，Python 那半边用 CSV 现算出的
+期望值也对（143/143/141/84/74/72），说明文件和终端都没问题。整条链上唯一经过
+Java 的是 `docker exec ... cypher-shell "..."` 这条 argv——JVM 解码命令行用的是
+`sun.jnu.encoding`，容器里没设 `LANG`/`LC_ALL` 时它退化成 ASCII，中文三个字节被
+逐个解成替换字符，字面量成了乱码，`name` 的相等判断自然恒为 false。
+
+改成 `\uXXXX` 转义后整条命令行是纯 ASCII，Cypher 解析时再还原成汉字，7 项立刻全绿。
+顺带补了三个纯 ASCII 的诊断（`ing_name_chars_total` 期望 2417、`ing_name_maxlen`
+期望 20、`chenpi_by_id` 按 nodeId 查期望 1），用来区分「导入时名字就坏了」和
+「只是传参坏了」——这两个原因的修法完全不同，不先分开就只能瞎改。
+
+这个坑只影响手敲 `cypher-shell`。应用走 Python 驱动（bolt，UTF-8 传输），不受影响。

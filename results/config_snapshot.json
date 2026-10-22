@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-10-21T14:04:00+0000",
+  "captured_at": "2026-10-22T06:16:31+0000",
   "config": {
     "neo4j_uri": "bolt://localhost:7687",
     "neo4j_user": "neo4j",

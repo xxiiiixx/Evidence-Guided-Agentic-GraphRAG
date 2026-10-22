@@ -186,7 +186,12 @@ add relationshipid_distinct  "MATCH ()-[r]->() RETURN count(DISTINCT r.relations
 add orphan_steps             "MATCH (s:CookingStep) WHERE NOT ()-[:CONTAINS_STEP]->(s) RETURN count(s);"
 add recipes_without_ingredient "MATCH (r:Recipe) WHERE NOT (r)-[:REQUIRES]->(:Ingredient) RETURN count(r);"
 add dropped_nodes_absent     "MATCH (n) WHERE n.nodeId IN ['200000000','300000000','201000066','201000833','201000869','201004002'] RETURN count(n);"
-add chenpi_recipe_count      "MATCH (r:Recipe) WHERE r.name = '陈皮排骨汤' RETURN count(r);"
+# 中文名一律写成 \uXXXX 转义：中文直接进 argv 时，cypher-shell 所在 JVM 若没有
+# UTF-8 locale，会按 ASCII 解码命令行，字面量变乱码、匹配恒为 0（第一次跑就踩了）。
+add chenpi_recipe_count      "MATCH (r:Recipe) WHERE r.name = '\u9648\u76AE\u6392\u9AA8\u6C64' RETURN count(r);"
+add chenpi_by_id             "MATCH (r:Recipe {nodeId:'201003873'}) RETURN count(r);"
+add ing_name_chars_total     "MATCH (i:Ingredient) RETURN sum(size(i.name));"
+add ing_name_maxlen          "MATCH (i:Ingredient) RETURN max(size(i.name));"
 add constraints_count        "SHOW CONSTRAINTS YIELD name RETURN count(*);"
 add fulltext_indexes         "SHOW FULLTEXT INDEXES YIELD name RETURN count(*);"
 
@@ -217,9 +222,17 @@ add crab_reach      "MATCH (a:Recipe {nodeId:'201000001'})-[:REQUIRES]->(:Ingred
 add crab_reach_main "MATCH (a:Recipe {nodeId:'201000001'})-[x:REQUIRES]->(:Ingredient)<-[y:REQUIRES]-(b:Recipe) WHERE x.isMain AND y.isMain AND b.nodeId <> a.nodeId RETURN count(DISTINCT b);"
 
 # 几个头部食材被多少道菜用到（同义词归一是否真的生效）
-for ing in 生抽 食用油 盐 大蒜 料酒 鸡蛋; do
-  add "use_$ing" "MATCH (i:Ingredient {name:'$ing'})<-[:REQUIRES]-(r:Recipe) RETURN count(DISTINCT r);"
-done
+# 第二列是 \uXXXX 转义后的名字，原因同上：不能让中文进 argv。
+while read -r ing esc; do
+  add "use_$ing" "MATCH (i:Ingredient {name:'$esc'})<-[:REQUIRES]-(r:Recipe) RETURN count(DISTINCT r);"
+done <<'PAIRS'
+生抽 \u751F\u62BD
+食用油 \u98DF\u7528\u6CB9
+盐 \u76D0
+大蒜 \u5927\u849C
+料酒 \u6599\u9152
+鸡蛋 \u9E21\u86CB
+PAIRS
 
 echo "共采集 $n 项标量指标（+2 张分组表）"
 
@@ -370,6 +383,10 @@ expected = {
         "200000000", "300000000", "201000066", "201000833", "201000869", "201004002"}),
     "chenpi_recipe_count": sum(1 for n in nodes
                                if n["labels"] == "Recipe" and n["name"] == "陈皮排骨汤"),
+    "chenpi_by_id": sum(1 for n in nodes if n["nodeId"] == "201003873"),
+    # 名字总字符数 / 最长名字：若导入时编码坏了，一个 2 字名会变成 6 个字符，这两项立刻露馅
+    "ing_name_chars_total": sum(len(name_of[i]) for i in ingredients),
+    "ing_name_maxlen": max(len(name_of[i]) for i in ingredients),
     "constraints_count": 8,                       # 由 neo4j_import.cypher 决定，不是 CSV 属性
     "fulltext_indexes": 3,
     "conn_all_total": ca["total"],
@@ -515,7 +532,9 @@ data = {
     "note": "期望值由本脚本从 data/rebuild/*.csv 现场重算，不依赖 pandas。"
             "pair_rows_unordered = ΣC(n,2)（同一对菜共享多种食材会重复计），"
             "pair_rows_directed = Σn(n-1)（等价 Cypher 里 a<>b 不带 a<b 过滤的行数），"
-            "pair_unique = 去重后的菜谱对数。",
+            "pair_unique = 去重后的菜谱对数。"
+            "中文名在 Cypher 里写成 \\uXXXX 转义，避免 cypher-shell 的 JVM 按 ASCII "
+            "解码命令行、把字面量变成乱码而使匹配恒为 0。",
 }
 out = os.path.join(root, "results", "day03_db_check.json")
 with open(out, "w", encoding="utf-8") as f:

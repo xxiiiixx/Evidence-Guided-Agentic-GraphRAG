@@ -161,7 +161,18 @@ printf '%s\n' "$RELS_BLOCK" > "$TMP/rels.txt"
 
 echo "--- 其余指标（逐条查询）---"
 n=0
-add() { rec "$1" "$(scalar "$2")"; n=$((n + 1)); printf '  %-28s ok\n' "$1"; }
+add() {
+  local v
+  v=$(scalar "$2")
+  rec "$1" "$v"
+  n=$((n + 1))
+  # 非数值 = 查询报错了。当场喊出来，否则只会在第 5 节显示成一个看不懂的 MISMATCH。
+  if [[ "$v" =~ ^-?[0-9]+(\.[0-9]+)?$ ]]; then
+    printf '  %-28s ok\n' "$1"
+  else
+    printf '  %-28s WARN 非数值返回: %s\n' "$1" "${v:0:120}"
+  fi
+}
 
 add nodes_total              "MATCH (n) RETURN count(n);"
 add rels_total               "MATCH ()-[r]->() RETURN count(r);"
@@ -424,7 +435,7 @@ def fmt(v):
         f = float(v)
         return str(int(f)) if f == int(f) else f"{f:.4f}"
     except (TypeError, ValueError):
-        return str(v)
+        return str(v)[:40]
 
 
 rows, bad = [], 0

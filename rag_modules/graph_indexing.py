@@ -236,7 +236,7 @@ class GraphIndexingModule:
                 f"{source_entity.entity_name}_食材",
                 target_entity.entity_name
             ])
-        elif relation_type == "HAS_STEP":
+        elif relation_type == "CONTAINS_STEP":
             # 菜谱-步骤关系的主题键
             keys.extend([
                 "制作步骤",
@@ -244,7 +244,7 @@ class GraphIndexingModule:
                 f"{source_entity.entity_name}_步骤",
                 "制作方法"
             ])
-        elif relation_type == "BELONGS_TO_CATEGORY":
+        elif relation_type == "BELONGS_TO":
             # 分类关系的主题键
             keys.extend([
                 "菜品分类",
@@ -298,14 +298,17 @@ class GraphIndexingModule:
         """
         logger.info("开始去重实体和关系...")
         
-        # 实体去重：基于名称
+        # 实体去重：基于「名称 + 类型」
+        # 不能只按名称：重建图里有 11 组菜谱/食材同名（牛排、小龙虾、凉皮…），
+        # 只按名称合并会把食材并进菜谱、并从 entity_kv_store 里删掉，
+        # 之后按 nodeId 取实体就取空了。
         name_to_entities = defaultdict(list)
         for entity_id, entity_kv in self.entity_kv_store.items():
-            name_to_entities[entity_kv.entity_name].append(entity_id)
+            name_to_entities[(entity_kv.entity_name, entity_kv.entity_type)].append(entity_id)
         
         # 合并重复实体
         entities_to_remove = []
-        for name, entity_ids in name_to_entities.items():
+        for _, entity_ids in name_to_entities.items():
             if len(entity_ids) > 1:
                 # 保留第一个，合并其他的内容
                 primary_id = entity_ids[0]

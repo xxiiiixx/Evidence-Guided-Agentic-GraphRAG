@@ -15,6 +15,7 @@ from rank_bm25 import BM25Okapi
 from langchain_core.documents import Document
 from neo4j import GraphDatabase
 from .graph_indexing import GraphIndexingModule
+from .entity_linker import EntityLinker, Match
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,11 @@ class HybridRetrievalModule:
         # 图索引模块
         self.graph_indexing = GraphIndexingModule(config, llm_client)
         self.graph_indexed = False
+
+        # 实体链接器：Node 4 起替代 extract_query_keywords() 的 LLM 调用，
+        # 词表在 _build_graph_index() 里用同一批图数据构建（见 entity_linker 模块注释）
+        self.entity_linker: Optional[EntityLinker] = None
+        self._last_link = None
 
     def initialize(self, chunks: List[Document]):
         """初始化检索系统"""
@@ -126,7 +132,10 @@ class HybridRetrievalModule:
             
             # 去重优化
             self.graph_indexing.deduplicate_entities_and_relations()
-            
+
+            # 实体链接词表：与上面 entity_kv_store 同源，不额外读文件
+            self.entity_linker = EntityLinker().build(recipes, ingredients)
+
             self.graph_indexed = True
             stats = self.graph_indexing.get_statistics()
             logger.info(f"图索引构建完成: {stats}")
@@ -219,17 +228,26 @@ class HybridRetrievalModule:
             keywords = query.split()
             return keywords[:3], keywords[3:6] if len(keywords) > 3 else keywords
     
-    def entity_level_retrieval(self, entity_keywords: List[str], top_k: int = 5) -> List[RetrievalResult]:
+    def entity_level_retrieval(self, entity_matches: List[Any], top_k: int = 5) -> List[RetrievalResult]:
         """
         实体级检索：专注于具体实体和关系
         使用图索引的键值对结构进行检索
+
+        entity_matches 的元素可以是 entity_linker.Match（Day 4 起的主路径，按 nodeId
+        精确取实体），也可以是字符串（keyword_source="llm" 的旧路径，按名字查字典）。
+        按 nodeId 取是关键：以名字为键的字典会把跨 label 同名（牛排/小龙虾…）的菜谱
+        和食材一起返回，Day 2 召回里混进 Ingredient 就是这个原因。
         """
         results = []
         
         # 1. 使用图索引进行实体检索
-        for keyword in entity_keywords:
+        for keyword in entity_matches:
             # 检索匹配的实体
-            entities = self.graph_indexing.get_entities_by_key(keyword)
+            if isinstance(keyword, Match):
+                entity = self.graph_indexing.entity_kv_store.get(keyword.node_id)
+                entities = [entity] if entity is not None else []
+            else:
+                entities = self.graph_indexing.get_entities_by_key(keyword)
             
             for entity in entities:
                 # 获取邻居信息
@@ -250,13 +268,19 @@ class HybridRetrievalModule:
                         "entity_name": entity.entity_name,
                         "entity_type": entity.entity_type,
                         "index_keys": entity.index_keys,
-                        "matched_keyword": keyword
+                        "matched_keyword": keyword.name if isinstance(keyword, Match) else keyword,
+                        # 命中原文与判定依据：排查"为什么是这条"时直接看这里
+                        "matched_surface": keyword.surface if isinstance(keyword, Match) else None,
+                        "match_source": keyword.entry.source if isinstance(keyword, Match) else "name",
+                        "ambiguous": keyword.ambiguous if isinstance(keyword, Match) else False
                     }
                 ))
         
         # 2. 如果图索引结果不足，使用Neo4j进行补充检索
+        #    fulltext 只吃字符串，Match 取它的规范名
         if len(results) < top_k:
-            neo4j_results = self._neo4j_entity_level_search(entity_keywords, top_k - len(results))
+            fallback_names = [k.name if isinstance(k, Match) else str(k) for k in entity_matches]
+            neo4j_results = self._neo4j_entity_level_search(fallback_names, top_k - len(results))
             results.extend(neo4j_results)
             
         # 3. 按相关性排序并返回
@@ -408,7 +432,7 @@ class HybridRetrievalModule:
                 cypher_query = """
                 UNWIND $keywords as keyword
                 MATCH (r:Recipe)
-                WHERE r.category CONTAINS keyword 
+                WHERE r.recipeCategory CONTAINS keyword 
                    OR r.cuisineType CONTAINS keyword
                    OR r.tags CONTAINS keyword
                 WITH r, keyword
@@ -417,7 +441,7 @@ class HybridRetrievalModule:
                 RETURN 
                     r.nodeId as node_id,
                     r.name as name,
-                    r.category as category,
+                    r.recipeCategory as category,
                     r.cuisineType as cuisine_type,
                     r.difficulty as difficulty,
                     ingredients,
@@ -470,14 +494,29 @@ class HybridRetrievalModule:
     def dual_level_retrieval(self, query: str, top_k: int = 5) -> List[Document]:
         """
         双层检索：结合实体级和主题级检索
+
+        关键词来源由 config.keyword_source 决定：
+          - "linker"（默认）直接在 entity_linker 的词表上匹配，全程不调 LLM；
+          - "llm" 是原来的 extract_query_keywords()，留给 Day 7 做消融对比。
         """
         logger.info(f"开始双层检索: {query}")
-        
+
         # 1. 提取关键词
-        entity_keywords, topic_keywords = self.extract_query_keywords(query)
-        
+        source = getattr(self.config, "keyword_source", None) or "linker"
+        link = None
+        if source == "linker" and self.entity_linker is not None:
+            link = self.entity_linker.link(query)
+            self._last_link = link
+            entity_matches: List[Any] = list(link.entities)
+            topic_keywords = link.topic_names
+            logger.info(f"实体链接: {link.summary()}")
+        else:
+            entity_keywords, topic_keywords = self.extract_query_keywords(query)
+            entity_matches = list(entity_keywords)
+            self._last_link = None
+
         # 2. 执行双层检索
-        entity_results = self.entity_level_retrieval(entity_keywords, top_k)
+        entity_results = self.entity_level_retrieval(entity_matches, top_k)
         topic_results = self.topic_level_retrieval(topic_keywords, top_k)
         
         # 3. 结果合并和排序
@@ -507,6 +546,13 @@ class HybridRetrievalModule:
                     "relevance_score": result.relevance_score,
                     "recipe_name": recipe_name,  # 确保有recipe_name字段
                     "search_type": "dual_level",  # 设置搜索类型
+                    # 命中详情留在文档上，排查"为什么召回了这条"时不用再跑一遍
+                    "entity_link": None if link is None else {
+                        "elapsed_ms": round(link.elapsed_ms, 3),
+                        "entities": [f"{m.surface}>{m.name}({m.label})" for m in link.entities],
+                        "topics": link.topic_names,
+                        "ambiguous": [m.surface for m in link.ambiguous_matches],
+                    },
                     **result.metadata
                 }
             )

@@ -59,6 +59,11 @@ class GraphRAGConfig:
     # 检索配置（LightRAG Round-robin策略）
     top_k: int = 5
 
+    # 图谱检索的关键词来源
+    #   linker：在图谱词表上做确定性匹配（默认，不调 LLM）
+    #   llm   ：旧行为，让 LLM 从问句里「猜」实体名
+    keyword_source: str = ""
+
     # 父文档检索配置
     enable_parent_doc_retrieval: bool = False  # 默认 False，不做父文档回填，直接把chunk当作上下文，有可能会出现步骤不全问题
     parent_doc_top_n: int = 3                   # 仅 RRF 分前 N 名做父文档替换
@@ -101,6 +106,9 @@ class GraphRAGConfig:
             "LLM_API_KEY_ENV", "MODELSCOPE_API_KEY"
         )
 
+        # 留空时由 hybrid_retrieval 兜底为 linker，这里只负责读环境变量
+        self.keyword_source = (self.keyword_source or _env("KEYWORD_SOURCE", "")).strip().lower()
+
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any]) -> 'GraphRAGConfig':
         """从字典创建配置对象"""
@@ -137,6 +145,7 @@ class GraphRAGConfig:
             'llm_base_url': self.llm_base_url,
             'llm_api_key_env': self.llm_api_key_env,
             'top_k': self.top_k,
+            'keyword_source': self.keyword_source,
             'enable_parent_doc_retrieval': self.enable_parent_doc_retrieval,
             'parent_doc_top_n': self.parent_doc_top_n,
             'parent_doc_max_chars': self.parent_doc_max_chars,

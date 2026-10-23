@@ -91,20 +91,23 @@ class GraphDataPreparationModule:
         logger.info("正在从Neo4j加载图数据...")
         
         with self.driver.session() as session:
-            # 加载所有菜谱节点，从Category关系中读取分类信息
+            # 加载所有菜谱节点，从 RecipeCategory 节点读取分类信息
+            # 重建图里关系名是 BELONGS_TO、节点标签是 RecipeCategory（Day 3 改的）；
+            # 写成 BELONGS_TO_CATEGORY/Category 时 OPTIONAL MATCH 不报错，
+            # 只会静默让全部分类变成「未知」。
             recipes_query = """
             MATCH (r:Recipe)
             WHERE r.nodeId >= '200000000'
-            OPTIONAL MATCH (r)-[:BELONGS_TO_CATEGORY]->(c:Category)
+            OPTIONAL MATCH (r)-[:BELONGS_TO]->(c:RecipeCategory)
             WITH r, collect(c.name) as categories
             RETURN r.nodeId as nodeId, labels(r) as labels, r.name as name, 
                    properties(r) as originalProperties,
                    CASE WHEN size(categories) > 0 
                         THEN categories[0] 
-                        ELSE COALESCE(r.category, '未知') END as mainCategory,
+                        ELSE COALESCE(r.recipeCategory, '未知') END as mainCategory,
                    CASE WHEN size(categories) > 0 
                         THEN categories 
-                        ELSE [COALESCE(r.category, '未知')] END as allCategories
+                        ELSE [COALESCE(r.recipeCategory, '未知')] END as allCategories
             ORDER BY r.nodeId
             """
             

@@ -148,13 +148,15 @@ class GraphRAGRetrieval:
         
         已知图中大致有以下节点和关系：
         - 节点类型：
-          - Recipe：菜谱节点，包含 name、description、cuisineType（如"川菜"）、category、tags、prepTime、cookTime 等属性
-          - Ingredient：食材节点，包含 name、category（如"蔬菜"、"蛋白质" 等）
-          - Category：菜品分类（如"川菜"、"家常菜"、"素菜"）
+          - Recipe：菜谱节点，包含 name、recipeCategory（如"素菜"）、cuisineType（如"川菜"）、tags、prepTime、cookTime、difficulty 等属性
+          - Ingredient：食材节点，包含 name、ingredientCategory（如"蔬菜"、"蛋白质" 等）
+          - RecipeCategory：菜品分类（如"素菜"、"荤菜"、"汤类"）
+          - DifficultyLevel：难度等级（一星~五星）
           - CookingStep：烹饪步骤
         - 主要关系：
-          - (Recipe)-[:REQUIRES]->(Ingredient)
-          - (Recipe)-[:BELONGS_TO_CATEGORY]->(Category)
+          - (Recipe)-[:REQUIRES {isMain, amount, unit}]->(Ingredient)
+          - (Recipe)-[:BELONGS_TO]->(RecipeCategory)
+          - (Recipe)-[:DIFFICULTY_LEVEL]->(DifficultyLevel)
           - (Recipe)-[:CONTAINS_STEP]->(CookingStep)
         
         请根据上述图结构分析下面的查询：
@@ -176,11 +178,11 @@ class GraphRAGRetrieval:
         
         3. target_entities：
            - 只在确实需要限制「路径终点」时填写
-           - 同样只能使用可能出现在 Recipe / Ingredient / Category 节点上的名称（如"蔬菜"、"素菜"、具体菜名）
+           - 同样只能使用可能出现在 Recipe / Ingredient / RecipeCategory 节点上的名称（如"蔬菜"、"素菜"、具体菜名）
            - 如果不确定目标实体怎么映射到图中，请返回空列表 []
         
         4. relation_types：本次推理中希望优先考虑的关系类型列表
-           - 例如：["REQUIRES", "BELONGS_TO_CATEGORY"]
+           - 例如：["REQUIRES", "BELONGS_TO"]
         
         5. max_depth：建议的图遍历深度（1-3 之间的整数）
         
@@ -204,7 +206,7 @@ class GraphRAGRetrieval:
           "query_type": "multi_hop",
           "source_entities": ["鸡肉"],
           "target_entities": ["蔬菜"],
-          "relation_types": ["REQUIRES", "BELONGS_TO_CATEGORY"],
+          "relation_types": ["REQUIRES", "BELONGS_TO"],
           "max_depth": 3,
           "constraints": {{}}
         }}
@@ -221,7 +223,7 @@ class GraphRAGRetrieval:
           "query_type": "subgraph",
           "source_entities": ["川菜"],
           "target_entities": [],
-          "relation_types": ["BELONGS_TO_CATEGORY", "REQUIRES"],
+          "relation_types": ["BELONGS_TO", "REQUIRES"],
           "max_depth": 2,
           "constraints": {{
             "health": ["糖尿病", "低糖"],

@@ -138,11 +138,12 @@ rag_modules/
   intelligent_query_router.py 一次性路由（Baseline）
   graph_indexing.py          图实体/关系索引
   generation_integration.py  上下文拼接 + 生成
+  graph_vocabulary.py        图谱名单（提示词用的真实名字，本身不做匹配）
+  llm_entity_extractor.py    闭集实体抽取（名单进提示词 + 输出校验）
 data/C9/                     Neo4j compose、Cypher 导入、CSV 数据（上游原样）
 data/rebuild/                Day 3 重建图：CSV + 精简导入脚本 + 独立 compose + 自检脚本
-scripts/                     Day 1 自检脚本、Day 3 图重建脚本、Day 4 实体链接评测
-  rag_modules/entity_linker.py  实体链接器（图谱词表 + Aho-Corasick）
-  tests/                       单元测试（stdlib unittest）
+scripts/                     Day 1 自检脚本、Day 3 图重建脚本、Day 4 抽词评测
+tests/                       单元测试（stdlib unittest）
 docs/
   28_day_plan.md             28 天计划（只写计划，不记执行过程）
   day01.md                   Day 1 执行记录（环境、数据基线、面试问答）
@@ -159,7 +160,7 @@ docs/
 - [Day 1 记录](./docs/day01.md) —— 环境快照、数据库基线、数据质量问题、面试问答
 - [Day 2 记录](./docs/day02.md) —— 配置环境变量化、CLI 设计、Milvus Lite 三个坑、实测结果
 - [Day 3 记录](./docs/day03.md) —— 图重建（连通性 0 → 255）、导入脚本重写、发现的数据缺陷
-- [Day 4 记录](./docs/day04.md) —— 实体链接器（LLM 抽词 14.8 s → 0.008 ms）、同名消歧、五处静默失效
+- [Day 4 记录](./docs/day04.md) —— 闭集实体抽取（名单进提示词，从「生成」变「选择」）、走过的确定性匹配弯路、七处静默失效
 
 每日记录独立存放，不与计划文档混写。
 

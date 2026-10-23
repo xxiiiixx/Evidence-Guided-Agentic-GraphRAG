@@ -1,0 +1,489 @@
+{
+  "mode": "contract",
+  "cases": [
+    {
+      "query": "咖喱炒蟹怎么做？",
+      "expected": [
+        "Recipe:咖喱炒蟹",
+        "Ingredient:青蟹",
+        "Ingredient:洋葱"
+      ],
+      "got": [
+        "Ingredient:洋葱",
+        "Ingredient:青蟹",
+        "Recipe:咖喱炒蟹"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.045
+    },
+    {
+      "query": "咖喱炒蟹要放椰浆吗",
+      "expected": [
+        "Recipe:咖喱炒蟹",
+        "Ingredient:椰浆"
+      ],
+      "got": [
+        "Ingredient:椰浆",
+        "Recipe:咖喱炒蟹"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.018
+    },
+    {
+      "query": "红烧冬瓜的做法",
+      "expected": [
+        "Recipe:红烧冬瓜"
+      ],
+      "got": [
+        "Recipe:红烧冬瓜"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.016
+    },
+    {
+      "query": "西红柿牛腩要放多少盐",
+      "expected": [
+        "Recipe:西红柿牛腩",
+        "Ingredient:盐"
+      ],
+      "got": [
+        "Ingredient:盐",
+        "Recipe:西红柿牛腩"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.016
+    },
+    {
+      "query": "大蒜和姜要一起放吗",
+      "expected": [
+        "Ingredient:大蒜",
+        "Ingredient:姜"
+      ],
+      "got": [
+        "Ingredient:大蒜",
+        "Ingredient:姜"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.016
+    },
+    {
+      "query": "生姜放多少",
+      "expected": [
+        "Ingredient:姜"
+      ],
+      "got": [
+        "Ingredient:姜"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.012
+    },
+    {
+      "query": "生抽和老抽有什么区别",
+      "expected": [
+        "Ingredient:生抽",
+        "Ingredient:老抽"
+      ],
+      "got": [
+        "Ingredient:生抽",
+        "Ingredient:老抽"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.013
+    },
+    {
+      "query": "料酒可以去腥吗",
+      "expected": [
+        "Ingredient:料酒"
+      ],
+      "got": [
+        "Ingredient:料酒"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.012
+    },
+    {
+      "query": "蚝油炒菜什么时候放",
+      "expected": [
+        "Ingredient:蚝油"
+      ],
+      "got": [
+        "Ingredient:蚝油"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.013
+    },
+    {
+      "query": "白糖和冰糖哪个更甜",
+      "expected": [
+        "Ingredient:白糖"
+      ],
+      "got": [
+        "Ingredient:白糖"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.011
+    },
+    {
+      "query": "淀粉勾芡怎么弄",
+      "expected": [
+        "Ingredient:淀粉"
+      ],
+      "got": [
+        "Ingredient:淀粉"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.011
+    },
+    {
+      "query": "牛排要煎几分钟",
+      "expected": [
+        "Recipe:牛排",
+        "Ingredient:牛排"
+      ],
+      "got": [
+        "Ingredient:牛排",
+        "Recipe:牛排"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.012
+    },
+    {
+      "query": "小龙虾怎么洗",
+      "expected": [
+        "Recipe:小龙虾",
+        "Ingredient:小龙虾"
+      ],
+      "got": [
+        "Ingredient:小龙虾",
+        "Recipe:小龙虾"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.013
+    },
+    {
+      "query": "凉皮是哪里的菜",
+      "expected": [
+        "Recipe:凉皮",
+        "Ingredient:凉皮"
+      ],
+      "got": [
+        "Ingredient:凉皮",
+        "Recipe:凉皮"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.015
+    },
+    {
+      "query": "川菜有哪些家常做法",
+      "expected": [
+        "Topic:川菜"
+      ],
+      "got": [
+        "Topic:川菜"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.012
+    },
+    {
+      "query": "水产类有什么推荐",
+      "expected": [
+        "Topic:水产"
+      ],
+      "got": [
+        "Topic:水产"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.049
+    },
+    {
+      "query": "素菜里最简单的",
+      "expected": [
+        "Topic:素菜"
+      ],
+      "got": [
+        "Topic:素菜"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.039
+    },
+    {
+      "query": "三星难度的菜有哪些",
+      "expected": [
+        "Topic:三星"
+      ],
+      "got": [
+        "Topic:三星"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.023
+    },
+    {
+      "query": "粤菜早茶点心",
+      "expected": [
+        "Topic:粤菜"
+      ],
+      "got": [
+        "Topic:粤菜"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.016
+    },
+    {
+      "query": "鸡蛋和什么一起炒好吃",
+      "expected": [
+        "Ingredient:鸡蛋"
+      ],
+      "got": [
+        "Ingredient:鸡蛋"
+      ],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.014
+    },
+    {
+      "query": "今天想吃点健康的",
+      "expected": [],
+      "got": [],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.016
+    },
+    {
+      "query": "来点清淡的",
+      "expected": [],
+      "got": [],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.01
+    },
+    {
+      "query": "有没有快手的菜",
+      "expected": [],
+      "got": [],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.013
+    },
+    {
+      "query": "家里来客人做什么好",
+      "expected": [],
+      "got": [],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.01
+    },
+    {
+      "query": "随便做点什么",
+      "expected": [],
+      "got": [],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.031
+    },
+    {
+      "query": "孩子不爱吃饭怎么办",
+      "expected": [],
+      "got": [],
+      "ok": true,
+      "extra": [],
+      "missing": [],
+      "droppedWithNoise": [
+        "Recipe:红烧肉",
+        "Recipe:五花肉",
+        "Recipe:松花蛋"
+      ],
+      "elapsed_ms": 0.025
+    }
+  ],
+  "passed": 26,
+  "total": 26,
+  "accuracy": "26/26",
+  "casesWithExpectedEntities": 20,
+  "fabricatedNamesDropped": 26,
+  "leaked": [],
+  "note": "contract 模式不衡量模型质量，只验证「名单外的名字无法进入结果」",
+  "generatedAt": "2026-10-23T23:31:26+08:00",
+  "vocabulary": {
+    "recipes": 321,
+    "ingredients": 746,
+    "entries": 1117,
+    "recipeEntries": 321,
+    "ingredientEntries": 746,
+    "topicEntries": 50,
+    "aliasSurfaces": 146,
+    "aliasRefs": 146,
+    "aliasRefsRaw": 1346
+  },
+  "promptChars": 6607,
+  "promptCharsPerCase": 6607,
+  "annotatedQueries": 26
+}

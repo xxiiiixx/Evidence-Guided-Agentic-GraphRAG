@@ -154,7 +154,7 @@ class GraphRAGRetrieval:
           - DifficultyLevel：难度等级（一星~五星）
           - CookingStep：烹饪步骤
         - 主要关系：
-          - (Recipe)-[:REQUIRES {isMain, amount, unit}]->(Ingredient)
+          - (Recipe)-[:REQUIRES {{isMain, amount, unit}}]->(Ingredient)
           - (Recipe)-[:BELONGS_TO]->(RecipeCategory)
           - (Recipe)-[:DIFFICULTY_LEVEL]->(DifficultyLevel)
           - (Recipe)-[:CONTAINS_STEP]->(CookingStep)

@@ -540,6 +540,7 @@ class HybridRetrievalModule:
             logger.info("关键词来源 llm_vocab: %s", result.summary())
 
         # 2. 执行双层检索
+        link = self._last_link  # 本轮抽取结果；none/llm_open 路径下为 None
         entity_results = self.entity_level_retrieval(entity_matches, top_k)
         topic_results = self.topic_level_retrieval(topic_keywords, top_k)
         

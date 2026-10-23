@@ -21,7 +21,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.045
+      "elapsed_ms": 0.049
     },
     {
       "query": "咖喱炒蟹要放椰浆吗",
@@ -41,7 +41,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.018
+      "elapsed_ms": 0.02
     },
     {
       "query": "红烧冬瓜的做法",
@@ -59,7 +59,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.016
+      "elapsed_ms": 0.019
     },
     {
       "query": "西红柿牛腩要放多少盐",
@@ -79,7 +79,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.016
+      "elapsed_ms": 0.015
     },
     {
       "query": "大蒜和姜要一起放吗",
@@ -99,7 +99,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.016
+      "elapsed_ms": 0.013
     },
     {
       "query": "生姜放多少",
@@ -173,7 +173,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.013
+      "elapsed_ms": 0.012
     },
     {
       "query": "白糖和冰糖哪个更甜",
@@ -191,7 +191,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.011
+      "elapsed_ms": 0.012
     },
     {
       "query": "淀粉勾芡怎么弄",
@@ -209,7 +209,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.011
+      "elapsed_ms": 0.01
     },
     {
       "query": "牛排要煎几分钟",
@@ -229,7 +229,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.012
+      "elapsed_ms": 0.015
     },
     {
       "query": "小龙虾怎么洗",
@@ -249,7 +249,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.013
+      "elapsed_ms": 0.015
     },
     {
       "query": "凉皮是哪里的菜",
@@ -269,7 +269,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.015
+      "elapsed_ms": 0.013
     },
     {
       "query": "川菜有哪些家常做法",
@@ -305,7 +305,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.049
+      "elapsed_ms": 0.011
     },
     {
       "query": "素菜里最简单的",
@@ -323,7 +323,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.039
+      "elapsed_ms": 0.022
     },
     {
       "query": "三星难度的菜有哪些",
@@ -341,7 +341,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.023
+      "elapsed_ms": 0.037
     },
     {
       "query": "粤菜早茶点心",
@@ -359,7 +359,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.016
+      "elapsed_ms": 0.029
     },
     {
       "query": "鸡蛋和什么一起炒好吃",
@@ -377,7 +377,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.014
+      "elapsed_ms": 0.019
     },
     {
       "query": "今天想吃点健康的",
@@ -391,7 +391,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.016
+      "elapsed_ms": 0.013
     },
     {
       "query": "来点清淡的",
@@ -405,7 +405,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.01
+      "elapsed_ms": 0.011
     },
     {
       "query": "有没有快手的菜",
@@ -419,7 +419,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.013
+      "elapsed_ms": 0.01
     },
     {
       "query": "家里来客人做什么好",
@@ -447,7 +447,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.031
+      "elapsed_ms": 0.009
     },
     {
       "query": "孩子不爱吃饭怎么办",
@@ -461,7 +461,7 @@
         "Recipe:五花肉",
         "Recipe:松花蛋"
       ],
-      "elapsed_ms": 0.025
+      "elapsed_ms": 0.009
     }
   ],
   "passed": 26,
@@ -471,7 +471,7 @@
   "fabricatedNamesDropped": 26,
   "leaked": [],
   "note": "contract 模式不衡量模型质量，只验证「名单外的名字无法进入结果」",
-  "generatedAt": "2026-10-23T23:31:26+08:00",
+  "generatedAt": "2026-10-23T23:41:17+08:00",
   "vocabulary": {
     "recipes": 321,
     "ingredients": 746,
@@ -483,7 +483,7 @@
     "aliasRefs": 146,
     "aliasRefsRaw": 1346
   },
-  "promptChars": 6607,
-  "promptCharsPerCase": 6607,
+  "promptChars": 5519,
+  "promptCharsPerCase": 5519,
   "annotatedQueries": 26
 }

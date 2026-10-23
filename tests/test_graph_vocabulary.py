@@ -104,11 +104,13 @@ class BuildTest(unittest.TestCase):
             self.assertIn(name, topics)
         self.assertEqual(self.vocab.entry_for("三星", gv.TOPIC).source, "difficulty")
 
-    def test_alias_is_displayed_with_canonical_name(self):
+    def test_display_is_plain_name_without_aliases(self):
+        """提示词里只印规范名：别名留在索引里换回规范名，不占 token。"""
         displays = self.vocab.display_by_label()[gv.INGREDIENT]
-        self.assertIn("姜（生姜、老姜）", displays)
-        # 别名等于规范名自身时不该重复展示
-        self.assertIn("盐", displays)
+        self.assertIn("姜", displays)
+        self.assertFalse(any("（" in d for d in displays))
+        # 但别名依然能换回规范名
+        self.assertEqual(self.vocab.entry_for("生姜", gv.INGREDIENT).name, "姜")
 
     def test_entry_for_accepts_alias(self):
         self.assertEqual(self.vocab.entry_for("生姜", gv.INGREDIENT).name, "姜")

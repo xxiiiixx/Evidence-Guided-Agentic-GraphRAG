@@ -68,10 +68,12 @@ class VocabularyEntry:
     source: str = "name"  # name / alias / category / cuisine / difficulty
 
     def display(self) -> str:
-        """提示词里的写法：规范名（别名1、别名2）。别名让模型能认出问句里的口语说法。"""
-        if not self.aliases:
-            return self.name
-        return f"{self.name}（{'、'.join(self.aliases)}）"
+        """提示词里的写法：只有规范名，不带括号别名。
+
+        别名不进提示词（省 1 098 个字符，见 `build()` 的说明），但仍留在
+        `_alias_index` 里，用来把模型自己写出来的旧名换回规范名——这部分不占 token。
+        """
+        return self.name
 
 
 @dataclass
@@ -257,6 +259,12 @@ class GraphVocabulary:
 
     def build(self, recipes: Iterable[Any], ingredients: Iterable[Any]) -> "GraphVocabulary":
         n_recipes = n_ingredients = n_aliases = 0
+
+        # 别名只进内部索引，不进提示词（提示词里只印规范名）：
+        # - `mergedAliases` 是 Day 3 同义词归一的产物（蒜→大蒜、生姜→姜…），
+        #   不记下来，模型写「生姜」时就换不回「姜」；
+        # - `synonyms` 覆盖只有 9.7%，且多为机器生成的脏值（「清清蒸生蚝」
+        #   「清steamed生蚝」），印出来只会费 token、诱导照抄；留在索引里则零成本。
 
         for node in recipes:
             props = getattr(node, "properties", {}) or {}

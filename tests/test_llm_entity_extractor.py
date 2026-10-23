@@ -125,10 +125,14 @@ class PromptTest(unittest.TestCase):
         self.assertIn("咖喱炒蟹", head)
         self.assertIn("红烧冬瓜", head)
 
-    def test_head_shows_aliases_so_model_can_recognise_them(self):
+    def test_head_lists_plain_names_without_alias_parentheses(self):
+        """名单尽量简单：只印规范名，不印括号别名。"""
         extractor, _ = make_extractor(['{"recipes": [], "ingredients": [], "topics": []}'])
-        self.assertIn("姜（生姜、老姜）", extractor.prompt_head)
-        self.assertIn("蟹（螃蟹）", extractor.prompt_head)
+        head = extractor.prompt_head
+        self.assertIn("姜", head)
+        self.assertIn("蟹", head)
+        self.assertNotIn("（生姜", head)
+        self.assertNotIn("（螃蟹", head)
 
     def test_question_goes_last_for_prefix_cache(self):
         extractor, client = make_extractor(['{"recipes": [], "ingredients": []}'])

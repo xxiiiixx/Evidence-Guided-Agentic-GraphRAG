@@ -15,7 +15,8 @@ from rank_bm25 import BM25Okapi
 from langchain_core.documents import Document
 from neo4j import GraphDatabase
 from .graph_indexing import GraphIndexingModule
-from .entity_linker import EntityLinker, Match
+from .graph_vocabulary import GraphVocabulary, KeywordResult, Match
+from .llm_entity_extractor import LLMEntityExtractor
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +67,11 @@ class HybridRetrievalModule:
         self.graph_indexing = GraphIndexingModule(config, llm_client)
         self.graph_indexed = False
 
-        # 实体链接器：Node 4 起替代 extract_query_keywords() 的 LLM 调用，
-        # 词表在 _build_graph_index() 里用同一批图数据构建（见 entity_linker 模块注释）
-        self.entity_linker: Optional[EntityLinker] = None
-        self._last_link = None
+        # 关键词抽取（Day 4）：名单在图索引构建时导出，抽取器把它编译成静态前缀。
+        # 线上路径不再有「确定性匹配」这一层 —— 判断交给模型，名单只划定边界。
+        self.vocabulary: Optional[GraphVocabulary] = None
+        self.llm_extractor: Optional[LLMEntityExtractor] = None
+        self._last_link: Optional[KeywordResult] = None
 
     def initialize(self, chunks: List[Document]):
         """初始化检索系统"""
@@ -133,8 +135,13 @@ class HybridRetrievalModule:
             # 去重优化
             self.graph_indexing.deduplicate_entities_and_relations()
 
-            # 实体链接词表：与上面 entity_kv_store 同源，不额外读文件
-            self.entity_linker = EntityLinker().build(recipes, ingredients)
+            # 名单：与上面 entity_kv_store 同源，不额外读文件
+            self.vocabulary = GraphVocabulary().build(recipes, ingredients)
+            if self.llm_client is not None:
+                # 名单当静态前缀编译一次，之后每条 query 只拼问题本身
+                self.llm_extractor = LLMEntityExtractor(
+                    self.llm_client, self.config, self.vocabulary
+                )
 
             self.graph_indexed = True
             stats = self.graph_indexing.get_statistics()
@@ -228,13 +235,18 @@ class HybridRetrievalModule:
             keywords = query.split()
             return keywords[:3], keywords[3:6] if len(keywords) > 3 else keywords
     
+    @property
+    def last_keywords(self) -> Optional[KeywordResult]:
+        """最近一次双层检索用的关键词，供 --trace 记录「到底 SELECT 了哪些名字」。"""
+        return self._last_link
+
     def entity_level_retrieval(self, entity_matches: List[Any], top_k: int = 5) -> List[RetrievalResult]:
         """
         实体级检索：专注于具体实体和关系
         使用图索引的键值对结构进行检索
 
-        entity_matches 的元素可以是 entity_linker.Match（Day 4 起的主路径，按 nodeId
-        精确取实体），也可以是字符串（keyword_source="llm" 的旧路径，按名字查字典）。
+        entity_matches 的元素可以是 graph_vocabulary.Match（主路径，按 nodeId
+        精确取实体），也可以是字符串（keyword_source="llm_open" 的对照路径，按名字查字典）。
         按 nodeId 取是关键：以名字为键的字典会把跨 label 同名（牛排/小龙虾…）的菜谱
         和食材一起返回，Day 2 召回里混进 Ingredient 就是这个原因。
         """
@@ -496,24 +508,36 @@ class HybridRetrievalModule:
         双层检索：结合实体级和主题级检索
 
         关键词来源由 config.keyword_source 决定：
-          - "linker"（默认）直接在 entity_linker 的词表上匹配，全程不调 LLM；
-          - "llm" 是原来的 extract_query_keywords()，留给 Day 7 做消融对比。
+          - "llm_vocab"（默认）闭集抽取：整份名单进提示词，模型只做「逐字选择」不做生成；
+          - "llm_open" 走原来的 extract_query_keywords()（开放提示词，会「推测」），
+            保留它只为 Day 7 的对照实验；
+          - "none" 不抽关键词，只用向量 + BM25（消融基线）。
         """
         logger.info(f"开始双层检索: {query}")
 
-        # 1. 提取关键词
-        source = getattr(self.config, "keyword_source", None) or "linker"
-        link = None
-        if source == "linker" and self.entity_linker is not None:
-            link = self.entity_linker.link(query)
-            self._last_link = link
-            entity_matches: List[Any] = list(link.entities)
-            topic_keywords = link.topic_names
-            logger.info(f"实体链接: {link.summary()}")
-        else:
+        # 1. 提取关键词（三条路最终都落到 entity_matches / topic_keywords）
+        source = (getattr(self.config, "keyword_source", None) or "llm_vocab").strip().lower()
+        entity_matches: List[Any]
+        topic_keywords: List[str]
+
+        if source == "none":
+            entity_matches, topic_keywords = [], []
+            self._last_link = None
+            logger.info("关键词来源 none：本轮不抽关键词，只用向量 + BM25")
+        elif source == "llm_open" or (source == "llm_vocab" and self.llm_extractor is None):
+            if source == "llm_vocab":
+                logger.warning("llm_client 未就绪，退回开放提示词路径")
             entity_keywords, topic_keywords = self.extract_query_keywords(query)
             entity_matches = list(entity_keywords)
             self._last_link = None
+        else:
+            if source != "llm_vocab":
+                logger.warning("未知 keyword_source=%s，按 llm_vocab 处理", source)
+            result = self.llm_extractor.extract(query)
+            entity_matches = list(result.entities)
+            topic_keywords = result.topic_names
+            self._last_link = result
+            logger.info("关键词来源 llm_vocab: %s", result.summary())
 
         # 2. 执行双层检索
         entity_results = self.entity_level_retrieval(entity_matches, top_k)
@@ -548,10 +572,14 @@ class HybridRetrievalModule:
                     "search_type": "dual_level",  # 设置搜索类型
                     # 命中详情留在文档上，排查"为什么召回了这条"时不用再跑一遍
                     "entity_link": None if link is None else {
+                        "source": source,
                         "elapsed_ms": round(link.elapsed_ms, 3),
                         "entities": [f"{m.surface}>{m.name}({m.label})" for m in link.entities],
                         "topics": link.topic_names,
                         "ambiguous": [m.surface for m in link.ambiguous_matches],
+                        # 模型返回了但不在名单里的名字：提示词是否真的生效，看这个字段
+                        "dropped": list(getattr(link, "dropped", []) or []),
+                        "prompt_chars": getattr(link, "prompt_chars", 0),
                     },
                     **result.metadata
                 }

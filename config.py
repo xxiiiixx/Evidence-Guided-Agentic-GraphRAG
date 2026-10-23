@@ -60,8 +60,10 @@ class GraphRAGConfig:
     top_k: int = 5
 
     # 图谱检索的关键词来源
-    #   linker：在图谱词表上做确定性匹配（默认，不调 LLM）
-    #   llm   ：旧行为，让 LLM 从问句里「猜」实体名
+    #   llm_vocab：闭集抽取（默认）——整份图谱名单进提示词，模型只做「逐字选择」
+    #   llm_open ：旧行为，让 LLM 从问句里自由「猜」实体名（会编图上没有的名字），
+    #              只保留给对照实验
+    #   none     ：不抽关键词，只用向量 + BM25（消融基线）
     keyword_source: str = ""
 
     # 父文档检索配置

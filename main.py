@@ -355,6 +355,10 @@ class AdvancedGraphRAGSystem:
 
         latency_ms = int((time.time() - started) * 1000)
 
+        # 关键词来源可观测：不记下来的话，「模型到底选了哪些名字」只能靠猜
+        link = getattr(self.traditional_retrieval, "last_keywords", None)
+        keywords = link.to_metadata() if link is not None else None
+
         record = {
             "question": question,
             "mode": mode,
@@ -370,6 +374,7 @@ class AdvancedGraphRAGSystem:
                 for d in docs
             ],
             "answer": answer,
+            "keywords": keywords,
             "retrieved_ms": retrieved_ms,
             "latency_ms": latency_ms,
             "llm_model": self.config.llm_model,

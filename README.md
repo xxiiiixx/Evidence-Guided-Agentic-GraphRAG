@@ -74,6 +74,7 @@ RAG Agent 的核心动作是「检索 → 判断够不够 → 决定继续还是
 - Day 1 环境与数据库自检脚本（`scripts/`）；环境已验证（T4 15GB，Ubuntu 24.04，Python 3.10.22）
 - Neo4j 已落地：5803 节点 / 20248 关系（[Day 1 记录](./docs/day01.md)）
 - 端到端链路已通：Neo4j → 分块 → BGE → Milvus Lite → hybrid 检索 → 生成（[Day 2 记录](./docs/day02.md)）
+- 检索侧的 LLM 抽词已换成图谱词表匹配（[Day 4 记录](./docs/day04.md)）
 
 **当前没有的**：自建 Benchmark、对比指标、消融结果。**尚无性能结论。**
 
@@ -139,12 +140,15 @@ rag_modules/
   generation_integration.py  上下文拼接 + 生成
 data/C9/                     Neo4j compose、Cypher 导入、CSV 数据（上游原样）
 data/rebuild/                Day 3 重建图：CSV + 精简导入脚本 + 独立 compose + 自检脚本
-scripts/                     Day 1 自检脚本、Day 3 图重建脚本
+scripts/                     Day 1 自检脚本、Day 3 图重建脚本、Day 4 实体链接评测
+  rag_modules/entity_linker.py  实体链接器（图谱词表 + Aho-Corasick）
+  tests/                       单元测试（stdlib unittest）
 docs/
   28_day_plan.md             28 天计划（只写计划，不记执行过程）
   day01.md                   Day 1 执行记录（环境、数据基线、面试问答）
   day02.md                   Day 2 执行记录（配置、CLI、Milvus Lite、实测）
   day03.md                   Day 3 执行记录（图重建、导入、数据质量问题）
+  day04.md                   Day 4 执行记录（实体链接、消歧、5 处静默失效）
 ```
 
 ---
@@ -155,6 +159,7 @@ docs/
 - [Day 1 记录](./docs/day01.md) —— 环境快照、数据库基线、数据质量问题、面试问答
 - [Day 2 记录](./docs/day02.md) —— 配置环境变量化、CLI 设计、Milvus Lite 三个坑、实测结果
 - [Day 3 记录](./docs/day03.md) —— 图重建（连通性 0 → 255）、导入脚本重写、发现的数据缺陷
+- [Day 4 记录](./docs/day04.md) —— 实体链接器（LLM 抽词 14.8 s → 0.008 ms）、同名消歧、五处静默失效
 
 每日记录独立存放，不与计划文档混写。
 
